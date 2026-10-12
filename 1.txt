@@ -1,39 +1,27 @@
-1. 从原始文件自动提取核心名称
-不要手工输入贴文中的 Cell 名，直接复制这一整条命令：
-python3 -c 'import re,sys; from pathlib import Path; d=Path(sys.argv[1]); s=(d/"main_actual.scs").read_text(); rows=re.findall(r"(?m)^\s*([^\s()]+)\s*\([^)]*\)\s+(oa_\S+)",s); hits=[(i,m) for i,m in rows if i.endswith("_core") or m.endswith("_core")]; len(hits)==1 or sys.exit("STOP: 核心引用不是唯一: "+str(hits)); i,m=hits[0]; p=m[3:].split("__"); len(p)==2 and all(p) or sys.exit("STOP: master无法准确拆分: "+m); (d/"core_library.txt").write_text(p[0]+"\n"); (d/"core_cell.txt").write_text(p[1]+"\n"); print("CORE_INSTANCE="+i); print("CORE_LIBRARY="+p[0]); print("CORE_CELL="+p[1])' "$st_main_diag"
-紧接着执行：
-set st_rc = $status
-echo "核心提取退出码=$st_rc"
+1. 检查会话产物
+ls -lh "$st_work/session.conf" "$st_work/before/mos_inventory.tsv"
+grep '^validation_scope=' "$st_work/session.conf"
 预期：
-CORE_INSTANCE=实际核心实例名
-CORE_LIBRARY=HiAplat730RV200_Maau_cal
-CORE_CELL=原始文件中的准确核心Cell名
-核心提取退出码=0
-这样既能参考之前的核心处理流程，又能确保操作对象来自当前工程的实际引用。
-出现 STOP 或退出码非零，就先停止。
-2. 设置新的核心测试会话
-第 1 步成功后，逐条执行：
-set st_project = "/tmpdata/maau_epc/users/k00981589/st-engine-maau"
-cd "$st_project"
-set st_core_lib = `cat "$st_main_diag/core_library.txt"`
-set st_core_cell = `cat "$st_main_diag/core_cell.txt"`
-set st_core_stamp = `date +%Y%m%d_%H%M%S`
-set st_work = "$st_run/work_core_${st_core_stamp}"
-set st_operations = "$st_run/test_operations_core_${st_core_stamp}"
-set st_variant_id = "TS_CORE_${st_core_stamp}"
-set st_variant_cell = "${st_core_cell}__${st_variant_id}"
-echo "本次操作对象=$st_core_lib/$st_core_cell/schematic"
-预期显示刚才自动提取的核心库名和 Cell 名。
-3. 直接扫描核心 PDK，并清点当前层 MOS
-下面是一整条命令：
-python3 server/site/standalone.py inspect --validation-scope structure_only --backend "$st_backend" --cds-lib "$st_session_cds" --lib "$st_core_lib" --cell "$st_core_cell" --view schematic --core-subckt "$st_core_cell" --work-dir "$st_work" --variant-lib "$st_variant_lib" --variant-cell "$st_variant_cell" --variant-id "$st_variant_id" --skill "$st_project/skill/standalone_topology_variant.il" >& "$st_run/logs/core_inspect_${st_core_stamp}.log"
-紧接着执行：
+两个文件均存在
+validation_scope=structure_only
+2. 自动准备固定测试操作
+python3 server/site/prepare_structure_test.py --session "$st_work" --output "$st_operations"
 set st_rc = $status
-tail -60 "$st_run/logs/core_inspect_${st_core_stamp}.log"
-echo "核心inspect退出码=$st_rc"
-成功预期：
-会话已创建: .../work_core_...
-可修改MOS[所选核心cell当前层]: 实际数量
-...
-原始网表: .../before/core_before.scs
-核心inspect退出码=0
+echo "准备操作退出码=$st_rc"
+根据你列出的实例，预期为：
+RESISTOR_TARGET=I105
+STACK_TARGET=I21
+RESISTOR_MASTER=实际扫描选出的电阻master
+CDF_RANGE_KNOWN=true或false
+STRUCTURE_TEST_PREPARED files=4
+准备操作退出码=0
+这里的电阻变换是 保留 I105，在 Source 串联电阻；Stack 使用另一只 MOS。
+退出码为 0 后执行：
+cat "$st_operations/test_selection.json"
+ls -lh "$st_operations"
+预期生成：
+resistor_initial.conf
+resistor_changed.conf
+stack_two.conf
+stack_three.conf
+test_selection.json
