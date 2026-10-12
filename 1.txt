@@ -1,3 +1,4 @@
+注意不要修改和删除任何文件。现在这个maau_cbb文件夹里除了有电路数据外，还有一个git功能，就是存储电路的数据，现在我想你探索一下这个功能由哪些文件实现的，怎么实现的，会生成project_cfg.json文件吗
 cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
 
 python3 - "$st_work" "$st_setup/maestro_read.json" "$st_preflight" "$st_batch" << 'PY'
@@ -193,12 +194,3 @@ sys.exit(0 if count > 0 else 2)
 
 set st_rc = $status
 echo "求解设置检查退出码=$st_rc"
-**预期：**先等待 Virtuoso 完成只读导出，然后显示已有失败日志和 SAVED_TEST 设置。正常读取时末尾包含：
-SAVED_TEST_SCRIPT_READ_OK
-SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true
-FIXED_INPUTS_UNCHANGED=true
-ELECTRICAL_VERIFIED=false
-VBIAS_GENERATED=false
-RAW_DETAILS_REMAIN_ON_SERVER=true
-求解设置检查退出码=0
-**把本次完整输出一次发给我即可。**如果退出码不是 0，也直接发输出，先停在这一步。
