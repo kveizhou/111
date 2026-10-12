@@ -1,196 +1,117 @@
-注意不要修改和删除任何文件。现在这个maau_cbb文件夹里除了有电路数据外，还有一个git功能，就是存储电路的数据，现在我想你探索一下这个功能由哪些文件实现的，怎么实现的，会生成project_cfg.json文件吗
+1. 执行完整读取命令
 cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
 
 python3 - "$st_work" "$st_setup/maestro_read.json" "$st_preflight" "$st_batch" << 'PY'
 import json, re, sys, tempfile
 from pathlib import Path
 from types import SimpleNamespace
-
 sys.path.insert(0, "server/site")
 import collect_cascode_batch as cb
-from op_provider import lines
 
 session, read, preflight, batch = map(Path, sys.argv[1:])
-bound = cb.inputs(SimpleNamespace(
-    session=session,
-    maestro_read=read,
-    preflight=preflight
-))
-
+bound = cb.inputs(SimpleNamespace(session=session, maestro_read=read, preflight=preflight))
 if not batch.is_absolute() or not (batch / "status.json").is_file():
     sys.exit("STOP: batch output directory is missing")
-
-out = Path(tempfile.mkdtemp(prefix="dc_review_", dir=str(batch)))
-summary = [
-    "CHECKER=cascode-dc-evidence-v1",
-    "SPECTRE_RERUN=false"
-]
-
-for tag, path in (
-    ("EXPORTED", preflight / "bench.scs"),
-    ("DC_PROBE", batch / "dc/input.scs")
-):
-    inside = False
-    for line in lines(path.read_text()):
-        text = line.strip()
-        if text.startswith("subckt "):
-            inside = True
-        elif text.startswith("ends "):
-            inside = False
-        elif not inside and (
-            re.match(r"\S+\s+(options|tran|dc|stb|info)\b", text)
-            or text.startswith(("ic ", "nodeset "))
-        ):
-            summary.append(tag + " " + text)
-
-log = batch / "dc/input.log"
-if not log.is_file():
-    log = batch / "dc/spectre.log"
-
-raw = log.read_text(errors="replace").splitlines()
-summary += [
-    "DC_LOG_LINES=" + str(len(raw)),
-    "DC_LOG_TAIL_BEGIN"
-]
-summary += raw[-70:]
-summary.append("DC_LOG_TAIL_END")
-
+out = Path(tempfile.mkdtemp(prefix="dc_review_ports_", dir=str(batch)))
 selection = bound["data"]["selection"]
-values = [
-    selection[k]
-    for k in ("bench_library", "bench_cell", "setup_view")
-]
-
+values = [selection[k] for k in ("bench_library", "bench_cell", "setup_view")]
+summary = ["CHECKER=cascode-dc-evidence-v2", "SPECTRE_RERUN=false",
+           "SELECTED_CORNER=" + bound["settings"]["corner"],
+           "READ_SCOPE=saved_base_test_settings"]
 code = 'load(getShellEnvVar("ST_SKILL_INIT"))\n'
-code += 'let((setup ts result port)\nresult=errset(prog( ()\n'
-code += 'setup=maeOpenSetup('
-code += ' '.join(json.dumps(v) for v in values)
-code += ' ?mode "r")\n'
-code += 'unless(setup error("Cannot open saved setup read-only"))\n'
-code += 'ts=maeGetTestSession('
-code += json.dumps(bound["settings"]["test_name"])
-code += ' ?session setup)\n'
-code += 'unless(ts error("Cannot read saved test"))\n'
-code += 'asiWriteOceanScript(getShellEnvVar("ST_REVIEW_OCEAN") ts)\n'
-code += 'unless(isFile(getShellEnvVar("ST_REVIEW_OCEAN")) error("Missing saved test export"))\n'
-code += 'port=outfile(getShellEnvVar("ST_REVIEW_DONE"))\n'
-code += 'unless(port error("Cannot write completion marker"))\n'
-code += 'fprintf(port "OK\\n") close(port) port=nil t\n) t)\n'
-code += 'when(port close(port))\n'
-code += 'unless(and(result car(result)) printf("ST_REVIEW_FAILED\\n"))\n'
-code += ')\nexit()\n'
-
+code += 'let((stReviewSetup stReviewTest stReviewResult stReviewOceanPort stReviewDonePort)\n'
+code += 'stReviewResult=errset(prog( ()\n'
+code += 'stReviewSetup=maeOpenSetup(' + ' '.join(json.dumps(v) for v in values) + ' ?mode "r")\n'
+code += 'unless(stReviewSetup error("Cannot open saved setup read-only"))\n'
+code += 'stReviewTest=maeGetTestSession(' + json.dumps(bound["settings"]["test_name"]) + ' ?session stReviewSetup)\n'
+code += 'unless(stReviewTest error("Cannot read saved test"))\n'
+code += 'stReviewOceanPort=asiOpenOceanScript(getShellEnvVar("ST_REVIEW_OCEAN"))\n'
+code += 'unless(stReviewOceanPort error("Cannot open OCEAN export port"))\n'
+code += 'unless(asiWriteOceanScript(stReviewOceanPort stReviewTest ?noRun t ?fullKey t)\n'
+code += 'error("Cannot export saved test settings"))\n'
+code += 'asiCloseOceanScript(stReviewOceanPort) stReviewOceanPort=nil\n'
+code += 'stReviewDonePort=outfile(getShellEnvVar("ST_REVIEW_DONE"))\n'
+code += 'unless(stReviewDonePort error("Cannot write completion marker"))\n'
+code += 'fprintf(stReviewDonePort "OK\\n") close(stReviewDonePort) stReviewDonePort=nil t\n) t)\n'
+code += 'when(stReviewOceanPort errset(asiCloseOceanScript(stReviewOceanPort) t))\n'
+code += 'when(stReviewDonePort close(stReviewDonePort))\n'
+code += 'unless(and(stReviewResult car(stReviewResult)) printf("ST_REVIEW_FAILED\\n"))\n)\nexit()\n'
 (out / "read.il").write_text(code)
-(out / "cds.lib").write_text(
-    "INCLUDE " + json.dumps(str(bound["cds"])) + "\n"
-)
-
+(out / "cds.lib").write_text("INCLUDE " + json.dumps(str(bound["cds"])) + "\n")
 saved = out / "saved_test.ocn"
-env = dict(
-    bound["env"],
-    ST_REVIEW_OCEAN=str(saved),
-    ST_REVIEW_DONE=str(out / "done")
-)
-
+env = dict(bound["env"], ST_REVIEW_OCEAN=str(saved), ST_REVIEW_DONE=str(out / "done"))
+count = 0
 try:
-    cb.command(
-        [
-            cb.executable(env, "ST_VIRTUOSO_BIN", "virtuoso"),
-            "-nograph",
-            "-replay", str(out / "read.il"),
-            "-log", str(out / "virtuoso.log")
-        ],
-        out,
-        env,
-        180,
-        out / "launcher.log"
-    )
-
-    if (
-        not saved.is_file()
-        or not saved.stat().st_size
-        or (out / "done").read_text().strip() != "OK"
-    ):
+    cb.command([cb.executable(env, "ST_VIRTUOSO_BIN", "virtuoso"), "-nograph", "-replay",
+                str(out / "read.il"), "-log", str(out / "virtuoso.log")], out, env, 180, out / "launcher.log")
+    if not saved.is_file() or not saved.stat().st_size or not (out / "done").is_file():
         raise ValueError("saved test export is incomplete")
-
+    if (out / "done").read_text().strip() != "OK":
+        raise ValueError("saved test completion marker is invalid")
     source = saved.read_text()
-    count = 0
-
-    for hit in re.finditer(
-        r"(?m)^\s*(analysis|option|envOption|temp|ic|nodeset)\s*\(",
-        source
-    ):
+    forms = []
+    for hit in re.finditer(r"(?m)^\s*(analysis|option|envOption|temp|ic|nodeset)\s*\(", source):
         start = source.index("(", hit.start())
-        depth = 0
-        quoted = False
-        escaped = False
-        comment = False
-
+        depth = 0; quoted = False; escaped = False; comment = False
         for pos in range(start, len(source)):
             char = source[pos]
             if comment:
-                if char == "\n":
-                    comment = False
+                if char == "\n": comment = False
             elif quoted:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    quoted = False
-            elif char == ";":
-                comment = True
-            elif char == '"':
-                quoted = True
-            elif char == "(":
-                depth += 1
+                if escaped: escaped = False
+                elif char == "\\": escaped = True
+                elif char == '"': quoted = False
+            elif char == ";": comment = True
+            elif char == '"': quoted = True
+            elif char == "(": depth += 1
             elif char == ")":
                 depth -= 1
-                if depth == 0:
-                    break
+                if depth == 0: break
         else:
             raise ValueError("unclosed saved setting")
-
-        summary.append(
-            "SAVED_TEST "
-            + " ".join(source[hit.start():pos + 1].split())
-        )
-        count += 1
-
-    if not count:
-        raise ValueError("no saved analysis/options found in export")
-
+        block = source[hit.start():pos + 1].strip()
+        forms.append(block)
+        flat = " ".join(block.split())
+        for offset in range(0, len(flat), 1000):
+            prefix = "SAVED_TEST " if offset == 0 else "SAVED_TEST_CONT "
+            summary.append(prefix + flat[offset:offset + 1000])
+    if not forms: raise ValueError("no saved analysis/options found in export")
     cb.unchanged(bound)
-    summary += [
-        "SAVED_TEST_SCRIPT_READ_OK",
-        "SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true",
-        "FIXED_INPUTS_UNCHANGED=true"
-    ]
-
+    (out / "settings_forms.json").write_text(json.dumps(forms, ensure_ascii=False, indent=2) + "\n")
+    count = len(forms)
+    summary += ["SAVED_FORM_COUNT=" + str(count), "SAVED_TEST_SCRIPT_READ_OK",
+                "SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true", "FIXED_INPUTS_UNCHANGED=true"]
 except (OSError, ValueError) as error:
     summary.append("SAVED_TEST_READ_INCOMPLETE=" + str(error))
-    summary += [
-        "NATIVE_ERROR " + item
-        for item in cb.brief_errors(out)
-    ]
-    count = -1
-
+    summary += ["NATIVE_ERROR " + item for item in cb.brief_errors(out)]
 shown = summary[:170]
-shown = [
-    s if len(s) <= 1200 else s[:1200] + " [DISPLAY_SHORTENED]"
-    for s in shown
-]
-shown += [
-    "SUMMARY_OMITTED_LINES=" + str(max(0, len(summary) - 170)),
-    "ELECTRICAL_VERIFIED=false",
-    "VBIAS_GENERATED=false",
-    "RAW_DETAILS_REMAIN_ON_SERVER=true"
-]
-
+shown += ["SUMMARY_OMITTED_LINES=" + str(max(0, len(summary) - 170)),
+          "ELECTRICAL_VERIFIED=false", "VBIAS_GENERATED=false", "RAW_DETAILS_REMAIN_ON_SERVER=true"]
 (out / "summary.txt").write_text("\n".join(shown) + "\n")
 print("\n".join(shown))
 sys.exit(0 if count > 0 else 2)
 'PY'
-
+2. 紧接着检查退出码
 set st_rc = $status
 echo "求解设置检查退出码=$st_rc"
+3. 成功时预期显示
+开头：
+CHECKER=cascode-dc-evidence-v2
+SPECTRE_RERUN=false
+SELECTED_CORNER=Copy_PT_FUNC_703
+READ_SCOPE=saved_base_test_settings
+中间出现实际保存的设置，例如：
+SAVED_TEST analysis(...)
+SAVED_TEST option(...)
+SAVED_TEST envOption(...)
+长设置会以 SAVED_TEST_CONT 接续显示。
+末尾必须包含：
+SAVED_TEST_SCRIPT_READ_OK
+SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true
+FIXED_INPUTS_UNCHANGED=true
+ELECTRICAL_VERIFIED=false
+VBIAS_GENERATED=false
+RAW_DETAILS_REMAIN_ON_SERVER=true
+求解设置检查退出码=0
+这里读取的是基准测试保存的设置；即使显示 temp(27)，也不代表把已选 Corner 的 125°C 改成了常温。
+执行完把这次完整摘要和退出码贴回来。若出现 SAVED_TEST_READ_INCOMPLETE 或退出码非零，就停在这里。 读取成功后才能根据实际设置判断下一次 DC 应如何运行；目前还不能生成已验证的真实 VBIAS。
