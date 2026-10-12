@@ -1,168 +1,44 @@
-这一步成功了，可以继续。无需重新扫描 PDK，也无需重新上传代码。
-本次测试对象已经确定：
-- I105：保留原 MOS，在 Source 串联电阻。
-- I21：生成共栅 MOS Stack。
-- 最终生成：电阻 0.09955 Ω，Stack 共 3 只 MOS。
-CDF_RANGE_KNOWN=false 表示扫描未取得阻值上下限；当前阻值用于验证修改流程，电气效果尚未验证。
-继续使用当前终端。以下按段执行，任何退出码非 0 就停止，不执行下一段。
-9. 确认初始电阻和两级 Stack
-执行：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/resistor_initial.conf"
+1. 上传这一个文件
+下载：[结构结果校验脚本](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/st-engine-maau/server/site/check_structure_result.py)
+上传到服务器这个位置：
+/tmpdata/maau_epc/users/k00981589/st-engine-maau/server/site/check_structure_result.py
+无需重新编译、扫描 PDK 或重新生成电路。
+2. 检查文件已上传
+继续使用刚才测试的同一个终端：
+cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
+ls -lh server/site/check_structure_result.py
+ls -lh "$st_work/session.conf" "$st_work/reports/validation.txt"
+预期：显示这三个文件，没有 No such file 或 Undefined variable。如果出现这两种错误，先停止，把回复贴给我。
+3. 运行校验
+逐条执行：
+set st_check_stamp = `date +%Y%m%d_%H%M%S`
+set st_check = "$st_run/structure_check_${st_check_stamp}"
+python3 server/site/check_structure_result.py --session "$st_work" --output "$st_check"
 set st_rc = $status
-echo "确认初始电阻退出码=$st_rc"
-预期包含：
-已确认操作: op_source_resistor
-当前操作数=1
-确认初始电阻退出码=0
-再执行：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/stack_two.conf"
-set st_rc = $status
-echo "确认两级Stack退出码=$st_rc"
-预期包含：
-已确认操作: op_mos_stack
-当前操作数=2
-确认两级Stack退出码=0
-查看活动操作：
-python3 server/site/standalone.py list --session "$st_work"
-预期列出两项：
-已确认操作: 2
-op_source_resistor -> I105
-op_mos_stack -> I21
-此时配置为电阻 0.049775 Ω、Stack 2 只 MOS。
-10. 连续撤回两次
-第一次撤回最后确认的 Stack：
-python3 server/site/standalone.py undo --session "$st_work"
-set st_rc = $status
-echo "撤回Stack退出码=$st_rc"
-python3 server/site/standalone.py list --session "$st_work"
-预期：
-撤回Stack退出码=0
-已确认操作: 1
-op_source_resistor -> I105
-第二次撤回电阻：
-python3 server/site/standalone.py undo --session "$st_work"
-set st_rc = $status
-echo "撤回电阻退出码=$st_rc"
-python3 server/site/standalone.py list --session "$st_work"
-预期：
-撤回电阻退出码=0
-已确认操作: 0
-11. 改为新阻值和三级 Stack
-确认修改后的电阻：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/resistor_changed.conf"
-set st_rc = $status
-echo "确认新阻值退出码=$st_rc"
-预期：操作数为 1，退出码为 0。
-确认三级 Stack：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/stack_three.conf"
-set st_rc = $status
-echo "确认三级Stack退出码=$st_rc"
-预期：操作数为 2，退出码为 0。
-检查：
-python3 server/site/standalone.py list --session "$st_work"
-预期：
-已确认操作: 2
-op_source_resistor -> I105
-op_mos_stack -> I21
-现在配置为电阻 0.09955 Ω、Stack 3 只 MOS。
-12. 测试清空全部活动修改
-执行：
-python3 server/site/standalone.py fresh --session "$st_work"
-set st_rc = $status
-echo "fresh退出码=$st_rc"
-python3 server/site/standalone.py list --session "$st_work"
-预期包含：
-已恢复到初始逻辑结构，活动操作数=0
-fresh退出码=0
-已确认操作: 0
-这一步清空当前活动操作，历史记录仍保留。
-13. 重新确认最终要生成的两项操作
-执行：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/resistor_changed.conf"
-set st_rc = $status
-echo "最终电阻确认退出码=$st_rc"
-预期：
-最终电阻确认退出码=0
-再执行：
-python3 server/site/standalone.py confirm --session "$st_work" --operation "$st_operations/stack_three.conf"
-set st_rc = $status
-echo "最终Stack确认退出码=$st_rc"
-预期：
-最终Stack确认退出码=0
-检查：
-python3 server/site/standalone.py list --session "$st_work"
-必须看到：
-已确认操作: 2
-op_source_resistor -> I105
-op_mos_stack -> I21
-14. 生成原理图、回读校验并发布
-执行：
-python3 server/site/standalone.py generate --session "$st_work" >& "$st_run/logs/core_generate_${st_core_stamp}.log"
-set st_rc = $status
-tail -80 "$st_run/logs/core_generate_${st_core_stamp}.log"
-echo "generate退出码=$st_rc"
-成功时预期包含：
-validation_scope=structure_only
-structural_ready=true
-nominal_dc_ready=false
-pvt_ready=false
-parameters_quantized=false
-ready_for_sizing=false
-封装子Cell数=2
-generate退出码=0
-还应显示本次派生电路地址及验证报告路径。
-这里的 nominal_dc_ready=false、pvt_ready=false、ready_for_sizing=false 是当前结构测试的正常状态：本次没有进行电气仿真。
-如果生成失败，停在这里，把下面两条命令的完整输出发给我：
-tail -100 "$st_run/logs/core_generate_${st_core_stamp}.log"
-cat "$st_work/reports/validation.txt"
-15. 检查报告、源电路及正式库
-15.1 检查验证报告
-执行：
-cat "$st_work/reports/validation.txt"
-必须包含：
-ok=true
-structural_ready=true
-stage=complete
-generated_cells=2
-validation_scope=structure_only
-15.2 检查源电路回读是否一致
-执行：
-cmp "$st_work/before/core_before.scs" "$st_work/after/source_roundtrip.scs"
-set st_rc = $status
-echo "源图未改检查退出码=$st_rc"
-预期：cmp 没有输出，随后显示：
-源图未改检查退出码=0
-表示源电路前后导出的结构网表一致。
-15.3 从正式库重新读取派生电路
-执行：
-setenv ST_VALIDATION_SCOPE structure_only
-"$st_backend" netlist --cds-lib "$st_session_cds" --lib "$st_variant_lib" --cell "$st_variant_cell" --view schematic --core-subckt "$st_core_cell" --output "$st_run/final_core_${st_core_stamp}.scs" --device-policy "$st_work/analysis/device_policy.tsv" >& "$st_run/logs/final_core_${st_core_stamp}.log"
-set st_rc = $status
-tail -20 "$st_run/logs/final_core_${st_core_stamp}.log"
-echo "正式库回读退出码=$st_rc"
-预期：
-正式库回读退出码=0
-15.4 检查正式根图是否仍引用暂存库
-执行：
-python3 -c 'from pathlib import Path; import sys; s=Path(sys.argv[1]).read_text(); "__STAGING" not in s or sys.exit("STOP: 正式根图仍依赖STAGING"); print("FINAL_ROOT_NO_STAGING_DEPENDENCY")' "$st_run/final_core_${st_core_stamp}.scs"
-set st_rc = $status
-echo "暂存依赖检查退出码=$st_rc"
-预期：
-FINAL_ROOT_NO_STAGING_DEPENDENCY
-暂存依赖检查退出码=0
-16. 在 Virtuoso 打开最终电路
-前面的生成和检查全部成功后，执行：
-python3 server/site/standalone.py open --session "$st_work"
-set st_rc = $status
-echo "open退出码=$st_rc"
-echo "最终原理图=$st_variant_lib/$st_variant_cell/schematic"
-预期：
-已请求打开: 本次派生电路的库名/Cell名/schematic
-open退出码=0
-在 Virtuoso 中检查两套封装：
-封装	应看到的结构
-I105 对应封装	保留原 MOS，Source 串联一个电阻，最终阻值为 0.09955 Ω
-I21 对应封装	共 3 只同 master MOS，Drain–Source 串联，Gate 共接，Bulk 继承原连接
-
-
-最终打开的是本次生成的核心 Cell 派生原理图。 顶层及其他父 Cell 不会自动改为引用它。完成上述步骤后，可以确认这次“修改—撤回—清空—重新修改—生成—显示”的结构流程；电气工作情况仍需后续仿真验证。
+echo "结构校验退出码=$st_rc"
+工具会自动读取本次会话中的准确库名和 Cell 名，依次显示：
+READ_SOURCE=START
+READ_SOURCE=COMPLETE
+READ_ROOT=START
+READ_ROOT=COMPLETE
+READ_PACKAGE_1=START
+READ_PACKAGE_1=COMPLETE
+READ_PACKAGE_2=START
+READ_PACKAGE_2=COMPLETE
+出现 START 后等待读取完成，暂时不要输入后两条命令。
+如果全部检查通过，后面的摘要应包含：
+RESULT=PASS
+EXPORTS_COMPLETED=4
+R_SERIES=PASS checks=1 failures=0
+R_VALUE=PASS checks=1 failures=0
+STACK_COUNT=PASS checks=1 failures=0
+STACK_CHAIN=PASS checks=1 failures=0
+FAILED_CHECKS=0
+ELECTRICAL_VERIFIED=false
+RAW_DETAILS_REMAIN_ON_SERVER=true
+结构校验退出码=0
+还有其他检查行，也一起复制。
+4. 把摘要贴给我
+只贴终端输出及退出码，不需要传任何服务器文件。 如果刚才输出已经滚走，可以重新显示：
+cat "$st_check/summary.txt"
+echo "结构校验退出码=$st_rc"
