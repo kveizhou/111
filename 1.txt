@@ -1,0 +1,27 @@
+1. 查看实际读取的电路和发现的 PDK 库
+set st_inputs = "$st_work/analysis/standalone_inputs"
+cat "$st_inputs/discovery.tsv"
+预期：显示表头，以及 source、technology、device 记录。
+其中 source 行应该对应：
+HiAplatRV500_ldo_sim    ...    ldo1_0_cbb_top    schematic
+device 行会显示本次实际发现的器件库名称和路径。
+2. 查看扫描文件的开头
+ls -lh "$st_inputs/pdk_probe.tsv"
+head -12 "$st_inputs/pdk_probe.tsv"
+预期：显示文件大小、表头和器件记录。表头应包含：
+oa_library
+oa_cell
+terminal_names
+parameter
+cdf_type
+has_schematic
+如果只有表头，也把输出发来。
+3. 汇总扫描内容
+下面是一整条命令：
+python3 -c 'import csv,sys; from collections import Counter; rows=list(csv.DictReader(open(sys.argv[1]),delimiter="\t")); masters={(r["oa_library"],r["oa_cell"]):r for r in rows}; print("PROBE_ROWS="+str(len(rows))); print("PROBE_MASTERS="+str(len(masters))); print("LIBRARIES="+str(sorted({r["oa_library"] for r in rows}))); print("HAS_SCHEMATIC="+str(dict(Counter(r["has_schematic"] for r in masters.values())))); print("PARAMETER_COUNTS="+str(dict(Counter(r["parameter"] for r in rows if r["parameter"] in ("w","l","nfin","fw","fingers","nf","m","r"))))); [print({k:r[k] for k in ("oa_library","oa_cell","model_name","terminal_names","has_schematic")}) for r in list(masters.values())[:20]]' "$st_inputs/pdk_probe.tsv"
+预期显示：
+PROBE_ROWS=实际记录数
+PROBE_MASTERS=实际master数
+LIBRARIES=实际库名列表
+HAS_SCHEMATIC=...
+PARAMETER_COUNTS=...
