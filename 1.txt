@@ -1,57 +1,58 @@
-1. 回到项目目录
-继续使用刚才成功校验的同一个终端：
+把它上传到服务器这个目录：
+/tmpdata/maau_epc/users/k00981589/st-engine-maau/
+在服务器执行：
 cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-echo "$st_work"
-ls -lh "$st_work/session.conf"
-预期：显示刚才成功的工作目录和 session.conf 文件。
-2. 一次检查实际测试电路及已有配置
-下面整块一起复制执行，包括最后的 PY：
-python3 - "$st_work" "$st_run" << PY
-import json, sys
-from pathlib import Path
-
-work = Path(sys.argv[1])
-run = Path(sys.argv[2])
-cfg = {}
-for line in (work / "session.conf").read_text().splitlines():
-    if "=" in line and not line.startswith("#"):
-        key, value = line.split("=", 1)
-        cfg[key] = value
-
-print("CURRENT_SOURCE=" + "/".join(cfg.get("source_" + k, "") for k in ("library", "cell", "view")))
-print("CURRENT_SCOPE=" + cfg.get("validation_scope", ""))
-print("CURRENT_CDS_LIB=" + cfg.get("cds_lib", ""))
-
-bench = Path("/tmpdata/maau_epc/users/k00981589/maau_cbb/HiAplatRV500_ldo_sim/ldo1_1_stb_dc_sim_cbb")
-print("BENCH_DIRECTORY_EXISTS=" + str(bench.is_dir()).lower())
-print("BENCH_SCHEMATIC_EXISTS=" + str((bench / "schematic").is_dir()).lower())
-print("BENCH_MAESTRO_EXISTS=" + str((bench / "maestro_pvt_ea").is_dir()).lower())
-if bench.is_dir():
-    print("BENCH_VIEWS=" + ",".join(sorted(p.name for p in bench.iterdir() if p.is_dir())))
-
-profiles = sorted(run.rglob("simulation_profile.json"))
-print("SAVED_PROFILE_COUNT=" + str(len(profiles)))
-for path in profiles[:8]:
-    data = json.loads(path.read_text())
-    print("PROFILE=" + str(path))
-    print("PROFILE_SCOPE=" + str(data.get("validation_scope", "")))
-    print("PROFILE_NOMINAL_CORNER=" + str(data.get("nominal_corner", "")))
-    print("PROFILE_OP_CORNERS=" + ",".join(sorted(data.get("op_corners", {}))))
-
-print("CASCODE_CONTEXT_READ_COMPLETE")
-PY
-set st_rc = $status
-echo "测试配置检查退出码=$st_rc"
-预期最后：
-CASCODE_CONTEXT_READ_COMPLETE
-测试配置检查退出码=0
-中间应显示：
-CURRENT_SCOPE=structure_only
-BENCH_DIRECTORY_EXISTS=true
-BENCH_MAESTRO_EXISTS=true
-BENCH_SCHEMATIC_EXISTS 和 PROFILE_OP_CORNERS 的具体结果，以服务器实际读取为准。
-3. 检查仿真工具入口
-bash -c 'command -v ocean'
-bash -c 'command -v spectre'
-预期：分别输出 OCEAN 和 Spectre 的可执行路径。
-把第 2、3 步的输出贴给我即可，通常不到 50 行。
+cp read_maestro_setup.py server/site/read_maestro_setup.py
+echo "脚本安装退出码=$status"
+预期：
+脚本安装退出码=0
+检查入口：
+python3 server/site/read_maestro_setup.py --help
+预期显示帮助，包含：
+--session
+--bench-lib
+--bench-cell
+--setup-view
+--expected-library-path
+--output
+如果出现 No such file，先停止，说明文件没有上传到指定位置。
+2. 设置本次读取结果目录
+继续使用刚才那个终端，沿用已有的 $st_work 和 $st_run。
+echo "当前核心会话=$st_work"
+set st_maestro_stamp = `date +%Y%m%d_%H%M%S`
+set st_setup = "$st_run/maestro_setup_${st_maestro_stamp}"
+echo "配置读取结果目录=$st_setup"
+预期：
+- 当前核心会话路径末尾为 work_core_20261012_134958。
+- 新结果目录末尾类似 maestro_setup_20261012_153000。
+不要提前创建 $st_setup 目录，脚本会创建。
+3. 读取你指定的 Maestro 设置
+下面整条命令一次复制执行：
+python3 server/site/read_maestro_setup.py --session "$st_work" --bench-lib HiAplatRV500_ldo_sim --bench-cell ldo1_1_stb_dc_sim_cbb --setup-view maestro_pvt_ea --expected-library-path /tmpdata/maau_epc/users/k00981589/maau_cbb/HiAplatRV500_ldo_sim --output "$st_setup" >& "$st_run/logs/maestro_setup_${st_maestro_stamp}.log"
+需要等待 Cadence 初始化。命令结束后，依次执行：
+set st_maestro_rc = $status
+cat "$st_run/logs/maestro_setup_${st_maestro_stamp}.log"
+echo "Maestro配置读取退出码=$st_maestro_rc"
+成功时，摘要应包含：
+READER=maestro-setup-v1
+RESULT=READ_OK
+READ_ONLY=true
+READ_ERRORS=0
+以及准确的设置身份：
+meta [setup] library="HiAplatRV500_ldo_sim"
+meta [setup] cell="ldo1_1_stb_dc_sim_cbb"
+meta [setup] view="maestro_pvt_ea"
+还会显示实际测试名称、设计 view、模型、变量和 Corner；这些内容以服务器读取结果为准。
+末尾预期包含：
+MAESTRO_SETUP_READ_OK
+SIMULATION_PROFILE_READY=false
+ELECTRICAL_VERIFIED=false
+RAW_DETAILS_REMAIN_ON_SERVER=true
+Maestro配置读取退出码=0
+这里两个 false 是正常的：这一步读取配置，尚未求解 VBIAS。 脚本通过 Maestro 的只读入口打开设置。Cadence 接口说明
+4. 把摘要回复给我
+把第 3 步显示的摘要和退出码贴给我即可，最多 190 行，完整文件留在服务器。
+如果出现 RESULT=PARTIAL、RESULT=INCOMPLETE 或退出码非零，先停止，不执行 Cascode generate。如果是读取失败，再执行：
+grep -n -m 8 -E '\*Error\*|undefined function|unbound variable|Cannot|error:' "$st_setup/virtuoso.log" "$st_setup/launcher.log"
+把这些错误行一起回复。我会据实际设置确定后续 Cascode/VBIAS 仿真配置，不明确的条件再与你确认。
+本地新增脚本的 11 项专项测试及全量回归已通过；真实 Maestro 读取尚待这次服务器结果。本地提交为 cd29f7b，未配置 GitHub 远程。
