@@ -1,58 +1,59 @@
-把它上传到服务器这个目录：
-/tmpdata/maau_epc/users/k00981589/st-engine-maau/
-在服务器执行：
-cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-cp read_maestro_setup.py server/site/read_maestro_setup.py
-echo "脚本安装退出码=$status"
-预期：
-脚本安装退出码=0
-检查入口：
-python3 server/site/read_maestro_setup.py --help
-预期显示帮助，包含：
---session
---bench-lib
---bench-cell
---setup-view
---expected-library-path
---output
-如果出现 No such file，先停止，说明文件没有上传到指定位置。
-2. 设置本次读取结果目录
-继续使用刚才那个终端，沿用已有的 $st_work 和 $st_run。
-echo "当前核心会话=$st_work"
-set st_maestro_stamp = `date +%Y%m%d_%H%M%S`
-set st_setup = "$st_run/maestro_setup_${st_maestro_stamp}"
-echo "配置读取结果目录=$st_setup"
-预期：
-- 当前核心会话路径末尾为 work_core_20261012_134958。
-- 新结果目录末尾类似 maestro_setup_20261012_153000。
-不要提前创建 $st_setup 目录，脚本会创建。
-3. 读取你指定的 Maestro 设置
-下面整条命令一次复制执行：
-python3 server/site/read_maestro_setup.py --session "$st_work" --bench-lib HiAplatRV500_ldo_sim --bench-cell ldo1_1_stb_dc_sim_cbb --setup-view maestro_pvt_ea --expected-library-path /tmpdata/maau_epc/users/k00981589/maau_cbb/HiAplatRV500_ldo_sim --output "$st_setup" >& "$st_run/logs/maestro_setup_${st_maestro_stamp}.log"
-需要等待 Cadence 初始化。命令结束后，依次执行：
-set st_maestro_rc = $status
-cat "$st_run/logs/maestro_setup_${st_maestro_stamp}.log"
-echo "Maestro配置读取退出码=$st_maestro_rc"
-成功时，摘要应包含：
-READER=maestro-setup-v1
-RESULT=READ_OK
-READ_ONLY=true
-READ_ERRORS=0
-以及准确的设置身份：
-meta [setup] library="HiAplatRV500_ldo_sim"
-meta [setup] cell="ldo1_1_stb_dc_sim_cbb"
-meta [setup] view="maestro_pvt_ea"
-还会显示实际测试名称、设计 view、模型、变量和 Corner；这些内容以服务器读取结果为准。
-末尾预期包含：
-MAESTRO_SETUP_READ_OK
-SIMULATION_PROFILE_READY=false
-ELECTRICAL_VERIFIED=false
-RAW_DETAILS_REMAIN_ON_SERVER=true
-Maestro配置读取退出码=0
-这里两个 false 是正常的：这一步读取配置，尚未求解 VBIAS。 脚本通过 Maestro 的只读入口打开设置。Cadence 接口说明
-4. 把摘要回复给我
-把第 3 步显示的摘要和退出码贴给我即可，最多 190 行，完整文件留在服务器。
-如果出现 RESULT=PARTIAL、RESULT=INCOMPLETE 或退出码非零，先停止，不执行 Cascode generate。如果是读取失败，再执行：
-grep -n -m 8 -E '\*Error\*|undefined function|unbound variable|Cannot|error:' "$st_setup/virtuoso.log" "$st_setup/launcher.log"
-把这些错误行一起回复。我会据实际设置确定后续 Cascode/VBIAS 仿真配置，不明确的条件再与你确认。
-本地新增脚本的 11 项专项测试及全量回归已通过；真实 Maestro 读取尚待这次服务器结果。本地提交为 cd29f7b，未配置 GitHub 远程。
+python3 - "$st_setup/maestro_read.json" << PY
+import json, sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text())
+if data.get("result") != "READ_OK":
+    raise SystemExit("STOP: 原配置读取未成功")
+
+rows = data["records"]
+global_names = {r["name"] for r in rows if r["kind"] == "global_variable"}
+
+def value(kind, scope, name):
+    hits = [r for r in rows if (r["kind"], r["scope"], r["name"]) == (kind, scope, name)]
+    return hits[0]["raw_value"] if len(hits) == 1 and hits[0]["status"] == "OK" else "UNKNOWN"
+
+corners = [r for r in rows if r["kind"] == "corner" and r["name"] == "enabled"]
+active = [r["scope"] for r in corners if r["raw_value"].strip() == "t" and r["status"] == "OK"]
+
+lines = [
+    "READER=maestro-focus-v1",
+    "ENABLED_CORNERS=" + (",".join(active) if active else "(none)"),
+    "CORNER_FLAGS=" + " ".join(r["scope"] + "=" + r["raw_value"] for r in corners)
+]
+
+for r in rows:
+    if r["kind"] == "test" and r["name"] in ("test_name", "design_view", "models", "enabled", "all_global_variables_disabled"):
+        lines.append("TEST [" + r["scope"] + "] " + r["name"] + "=" + r["raw_value"])
+
+for corner in active:
+    for r in rows:
+        if r["scope"] == corner and r["kind"] == "corner_variable":
+            lines.append("CORNER_VARIABLE [" + corner + "] " + r["name"] + "=" + r["raw_value"] +
+                         " ENABLED=" + value("corner_variable_enabled", corner, r["name"]))
+        if r["scope"] == corner and r["kind"] == "corner_model_file":
+            enabled = value("corner_model_enabled", corner, r["name"])
+            if enabled.strip() != "nil":
+                lines.append("CORNER_MODEL [" + corner + "] " + r["name"] +
+                             " FILE=" + r["raw_value"] +
+                             " SECTION=" + value("corner_model_section", corner, r["name"]) +
+                             " ENABLED=" + enabled)
+
+for r in rows:
+    if r["kind"] == "global_variable":
+        lines.append("GLOBAL_VARIABLE " + r["name"] + "=" + r["raw_value"] +
+                     " ENABLED=" + value("global_variable_enabled", r["scope"], r["name"]))
+    if r["kind"] == "test_variable":
+        flag = value("test_variable_global_override_enabled", r["scope"], r["name"]) if r["name"] in global_names else "N/A_LOCAL_VARIABLE"
+        lines.append("TEST_VARIABLE [" + r["scope"] + "] " + r["name"] +
+                     "=" + r["raw_value"] + " GLOBAL_OVERRIDE=" + flag)
+
+for line in lines[:180]:
+    print(" ".join(line.splitlines()))
+
+print("FOCUS_OMITTED_LINES=" + str(max(0, len(lines) - 180)))
+print("FOCUSED_CONFIG_READ_COMPLETE")
+PY
+紧接着执行：
+set st_focus_rc = $status
+echo "有效配置提取退出码=$st_focus_rc"
