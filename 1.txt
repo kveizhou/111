@@ -1,24 +1,23 @@
-set st_analog_lib = "$st_ldo_lib"
-set st_analog_cell = "ldo_200ma_topv100"
-set st_analog_diag = `mktemp -d "$st_run/analog_context_XXXXXXXX"`
-echo "读取对象=$st_analog_lib/$st_analog_cell/schematic"
+set st_main_lib = "$st_analog_lib"
+set st_main_cell = "ldo_200ma_main_v100"
+set st_main_diag = `mktemp -d "$st_run/main_context_XXXXXXXX"`
+echo "读取对象=$st_main_lib/$st_main_cell/schematic"
 预期：
-读取对象=HiAplat730RV200_Maau_cal/ldo_200ma_topv100/schematic
-2. 读取这一层
+读取对象=HiAplat730RV200_Maau_cal/ldo_200ma_main_v100/schematic
 下面是一整条命令：
-"$st_backend" snapshot --cds-lib "$st_session_cds" --lib "$st_analog_lib" --cell "$st_analog_cell" --view schematic --core-subckt "$st_analog_cell" --device-policy "$st_diag/empty_policy.tsv" --netlist-output "$st_analog_diag/analog_actual.scs" --catalog-output "$st_analog_diag/catalog.tsv" --geometry-output "$st_analog_diag/geometry.tsv" >& "$st_analog_diag/read.log"
+"$st_backend" snapshot --cds-lib "$st_session_cds" --lib "$st_main_lib" --cell "$st_main_cell" --view schematic --core-subckt "$st_main_cell" --device-policy "$st_diag/empty_policy.tsv" --netlist-output "$st_main_diag/main_actual.scs" --catalog-output "$st_main_diag/catalog.tsv" --geometry-output "$st_main_diag/geometry.tsv" >& "$st_main_diag/read.log"
 紧接着执行：
-set st_analog_rc = $status
-echo "模拟LDO只读检查退出码=$st_analog_rc"
+set st_main_rc = $status
+echo "LDO主支路只读检查退出码=$st_main_rc"
 预期：
-模拟LDO只读检查退出码=0
-如果不是 0，先停止，执行并发来：
-tail -60 "$st_analog_diag/read.log"
-3. 显示网表
+LDO主支路只读检查退出码=0
+如果不是 0，先停止，把下面命令的输出发来：
+tail -60 "$st_main_diag/read.log"
+2. 显示主支路网表
 退出码为 0 后执行：
-cat "$st_analog_diag/analog_actual.scs"
-预期显示：
-subckt ldo_200ma_topv100 ...
-实际实例和master
+cat "$st_main_diag/main_actual.scs"
+预期：
+subckt ldo_200ma_main_v100 ...
+实际实例及master
 ...
-ends ldo_200ma_topv100
+ends ldo_200ma_main_v100
