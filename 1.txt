@@ -1,372 +1,204 @@
-28nm 与 14nm DRC 间距规则详细解析
-本次比较的是你上传的两个 DRC 文件中的：
-- 28nm：ALPA_7，主要通过两组几何间距检查完成判断。
-- 14nm：ALPA_S_2，使用七组间距检查，区分普通区域、特殊区域和不同边缘方向。
-这两条规则的自然语言描述基本一致，但实现方式存在明显差异。
-一、两条规则究竟在检查什么？
-1. 自然语言要求
-28nm：
-Space between (ALPA AND (MD sizing up 3um)) and (ALPA AND (MD sizing up 3um)) or ALRDL. ≥ 2.5um
-
-14nm：
-Space between (ALPA AND (MD sizing up 3um)) and (ALPA AND (MD sizing up 3um)) or ALRDL ≥ 2.25um
-
-翻译成中文：
-检查 MD 图形向外扩展 3μm 后所覆盖的 ALPA 图形，与其他相应 ALPA 图形或 ALRDL 图形之间的最小间距。
-两条规则都要求豁免同一个多边形内部的间距情况。
-2. 关键图层的含义
-图层	含义
-ALPA	被检查的铝金属相关版图层
-MD	Passivation-2 钝化层开口
-ALRDL	根据 ALPA 宽度条件产生的派生图层
-INDMY	需要特殊 DRC 检查处理的标记区域
-MARKS	用来过滤部分检查结果的标记图层
-注意：两个文件中的 ALRDL 定义稍有差异。28nm 使用 ALPA WITH WIDTH <= 35，14nm 使用 ALPA WITH WIDTH < 35。
-3. 先理解 MD 外扩 3μm
-两种工艺都使用了以下操作：
-ALPA AND (SIZE MD BY 3)
-
-
-它分成三个步骤：
-1. 获取 MD 图形。
-2. 将 MD 图形向外扩大 3μm。
-3. 只保留与扩展后 MD 区域重合的 ALPA 部分。
-可以将得到的辅助图形记作 X：
-\[
-X=ALPA\cap SIZE(MD,3\mu m)
-\]
-
-之后 DRC 实际要检查的是：
-\[
-Spacing(X,X)
-\]
-
-以及：
-\[
-Spacing(X,ALRDL)
-\]
-
-因此，规则的检查对象不是整个 ALPA 层上的所有间距，而是经过 MD 区域筛选的特定图形之间的间距。
-二、28nm 的 ALPA_7：完整代码与逐行解释
-源文件：SmicDR1R_cal28_log_SION_sali_p1mtx_1051825_V1.10_1.drc，第 9316–9326 行
-ALPA_7 {
-@ Space between (ALPA AND (MD sizing up 3um)) and (ALPA AND (MD sizing up 3um)) or ALRDL.
-@ ALRDL is defined as ALPA layer width equal or smaller than 35um.
-@ This rule doesn’t check the space in the same polygon. >= 2.5 um
-
-  X = ALPA AND (SIZE MD BY 3)
-  OUT1 = EXT X < 2.5 ABUT >0 < 90 SINGULAR REGION SPACE
-  OUT1 NOT MARKS
-
-  OUT2 = (EXT X ALRDL < 2.5 ABUT >0 < 90 SINGULAR REGION) NOT (EXT ALPA < 2.5 ABUT >0 < 90 SINGULAR REGION NOTCH)
-  OUT2 NOT MARKS
-}
-
-
-第 1 行：构造检查图形
-X = ALPA AND (SIZE MD BY 3)
-
-
-代码	含义
-SIZE MD BY 3	把 MD 图形向外扩展 3μm
-AND	求两个版图图层的几何交集
-ALPA AND (...)	取 ALPA 与扩展 MD 的重合部分
-X =	把得到的图形存入临时图层 X
-作用：先确定哪些 ALPA 图形需要参与检查。
-第 2 行：检查 X 与 X 之间的间距
-OUT1 = EXT X < 2.5 ABUT >0 < 90 SINGULAR REGION SPACE
-
-
-关键字	含义
-OUT1	保存第一组检查结果
-EXT	External Spacing，外部间距检查
-X	被检查的辅助图形
-< 2.5	查找间距小于 2.5μm 的违规
-ABUT >0 <90	限制参与测量的边缘邻接角度条件
-SINGULAR	限定采用 Singular 类边缘测量结果
-REGION	将命中的测量结果转化为区域图形
-SPACE	选择不同多边形间的 Space 检查，排除同多边形凹槽间距
-例如，两块独立的目标 ALPA 图形间距是 2.3μm，就会属于需要检查的违规情况。
-第 3 行：过滤 MARKS 区域
-OUT1 NOT MARKS
-
-
-NOT 表示几何差集：
-\[
-OUT1_{\mathrm{final}}=OUT1-MARKS
-\]
-
-即把与 MARKS 重叠的违规区域去掉，输出剩余部分。
-这不会修改实际版图，只是在过滤 DRC 检查结果。
-第 4 行：检查 X 与 ALRDL 之间的间距
-OUT2 = (EXT X ALRDL < 2.5 ABUT >0 < 90 SINGULAR REGION) NOT (EXT ALPA < 2.5 ABUT >0 < 90 SINGULAR REGION NOTCH)
-
-
-这是 28nm 规则中最复杂的一行。
-可以分为三个部分理解。
-第一部分：检查 X 与 ALRDL 的距离。
-EXT X ALRDL < 2.5 ABUT >0 < 90 SINGULAR REGION
-
-
-与 OUT1 不同，这里指定两个输入图层：
-- 第一个输入：X
-- 第二个输入：ALRDL
-检查两者之间是否出现小于 2.5μm 的外部间距。
-第二部分：找出 ALPA 的凹槽间距。
-EXT ALPA < 2.5 ABUT >0 < 90 SINGULAR REGION NOTCH
-
-
-这里的关键是 NOTCH。
-NOTCH 针对同一个多边形内部形成的狭窄凹槽或内部边缘间距，与不同多边形之间的 SPACE 检查不同。
-第三部分：用 NOT 减去第二类结果。
-OUT2 = (第一部分) NOT (第二部分)
-
-
-由于 X 和 ALRDL 都是从 ALPA 派生出来的，直接比较可能包含不希望报告的同多边形凹槽测量。
-因此作者使用 NOTCH 结果进行过滤，以实现规则描述中的：
-This rule doesn't check the space in the same polygon.
-第 5 行：再次过滤 MARKS
-OUT2 NOT MARKS
-
-
-对第二组违规结果执行与 OUT1 相同的过滤。
-28nm 整体执行流程
-输入 ALPA + MD + ALRDL
-
-MD 向外扩展 3μm，与 ALPA 取交集，生成 X
-OUT1
-X 与 X 间距检查
-2.5μm
-
-
-OUT2
-X 与 ALRDL 间距检查
-减去 NOTCH 结果
-
-
-
-排除 MARKS，输出违规图形
-
-28nm 的核心思想： 先选取目标版图图形，然后进行两组最小间距检查，并过滤同多边形凹槽和特殊标记区域。
-
-三、14nm 的 ALPA_S_2：完整代码与逐行解释
-源文件：1P8M_DV_3DM_Q1_3Q2_TMa_ALPA2.drc，第 44189–44210 行
-完整代码
-ALPA_in_MD_ov_3 = ALPA AND (SIZE MD BY 3)
-
-ALPA_S_2 {
-@ Space between (ALPA AND (MD sizing up 3um)) and (ALPA AND (MD sizing up 3um)) or ALRDL >= 2.25um
-@ DRC waive space in same polygon
-@ It allows 0.009um DRC checking tolerance in INDMY region
-
- err1 = EXT ALPA_in_MD_ov_3 < 2.25 ABUT<90 SINGULAR REGION SPACE
- err2 = EXT ALPA_in_MD_ov_3 ALRDL < 2.25 ABUT<90 SINGULAR REGION MEASURE ALL
- err3 = EXT ALPA_in_MD_ov_3 < 2.25 ABUT<90 SINGULAR REGION ANGLED==0 SPACE
- err4 = EXT ALPA_in_MD_ov_3 ALRDL < 2.25 ABUT<90 SINGULAR REGION MEASURE ALL ANGLED==0
- err5 = EXT ALPA_in_MD_ov_3 (ANGLE ALPA_in_MD_ov_3 > 44 < 46) < 2.25-0.009 ABUT<90 OPPOSITE2 REGION SPACE
- err6 = EXT ALPA_in_MD_ov_3 (ANGLE ALRDL > 44 < 46) < 2.25-0.009 ABUT<90 OPPOSITE2 REGION MEASURE ALL
- err7 = EXT (ANGLE ALPA_in_MD_ov_3 > 44 < 46) ALRDL < 2.25-0.009 ABUT<90 OPPOSITE1 REGION MEASURE ALL
-
- err1 NOT INSIDE INDMY
- err2 NOT INSIDE INDMY
- err3 NOT OUTSIDE INDMY
- err4 NOT OUTSIDE INDMY
- err5 NOT OUTSIDE INDMY
- err6 NOT OUTSIDE INDMY
- err7 NOT OUTSIDE INDMY
-}
-
-
-14nm 的规则可以分成三步：
-1. 生成检查图形。
-2. 执行七组不同的间距检查。
-3. 根据 INDMY 区域筛选结果。
-第 1 行：生成检查图形
-ALPA_in_MD_ov_3 = ALPA AND (SIZE MD BY 3)
-
-
-这和 28nm 的 X = ALPA AND (SIZE MD BY 3) 完全相同，只是使用了更具体的变量名称。
-因此，两代工艺选择的初始检查对象是一致的。
-第 2 行：err1，一般 ALPA 间距
-err1 = EXT ALPA_in_MD_ov_3 < 2.25 ABUT<90 SINGULAR REGION SPACE
-
-
-它的主要作用是检查目标 ALPA 图形之间是否存在小于 2.25μm 的间距。
-这行相当于 28nm 中的 OUT1，但有两个区别：
-- 间距阈值从 2.5μm 变为 2.25μm。
-- ABUT<90 与 28nm 的 ABUT>0<90 在是否包含 0° 边缘邻接情况方面存在差异。
-第 3 行：err2，ALPA 与 ALRDL 间距
-err2 = EXT ALPA_in_MD_ov_3 ALRDL < 2.25 ABUT<90 SINGULAR REGION MEASURE ALL
-
-
-这里指定了两个检查对象：
-- ALPA_in_MD_ov_3
-- ALRDL
-然后检查二者的外部间距是否小于 2.25μm。
-这一行新增了：
-MEASURE ALL
-它的作用是忽略双层尺寸检查默认的多边形包含关系限制，使原本可能受限制的边缘对也能够参与测量。
-
-studylib.net
-
-
-
-所以它并不是简单地“检查全部 ALPA”，而是改变了间距测量时的几何筛选条件。
-第 4 行：err3，正交边缘的 ALPA 间距
-err3 = EXT ALPA_in_MD_ov_3 < 2.25 ABUT<90 SINGULAR REGION ANGLED==0 SPACE
-
-
-这行与 err1 很像，主要区别是增加了：
-ANGLED==0
-
-
-ANGLED 用于限制尺寸测量中的非正交斜边数量。
-ANGLED==0 表示参与测量的两条边都不是非正交斜边，也就是水平或竖直边缘。
-
-技术栈
-
-
-
-为什么需要单独检查这类边？
-因为 14nm 后面的 err5～err7 专门针对约 45° 的斜边采用另一套检查方法。
-第 5 行：err4，正交边缘的 ALPA 与 ALRDL 间距
-err4 = EXT ALPA_in_MD_ov_3 ALRDL < 2.25 ABUT<90 SINGULAR REGION MEASURE ALL ANGLED==0
-
-
-这行将 err2 的检查限定为没有非正交斜边的测量。
-可以理解为：
-- err3：目标 ALPA 之间的正交边缘间距。
-- err4：目标 ALPA 与 ALRDL 之间的正交边缘间距。
-两者都使用 2.25μm 的阈值。
-第 6 行：err5，ALPA 约 45° 斜边的间距
-err5 = EXT ALPA_in_MD_ov_3 (ANGLE ALPA_in_MD_ov_3 > 44 < 46) < 2.25-0.009 ABUT<90 OPPOSITE2 REGION SPACE
-
-
-这一行最值得重点分析，因为它体现了 14nm 的特殊测量要求。
-拆成三个关键部分。
-第一部分：选出约 45° 的斜边
-ANGLE ALPA_in_MD_ov_3 > 44 < 46
-
-
-这里的 ANGLE 是边缘筛选操作，用来提取角度处于 44° 到 46° 之间的 ALPA 边缘。
-第二部分：改变违规判断阈值
-< 2.25-0.009
-
-
-计算结果：
-\[
-2.25-0.009=2.241\ \mu m
-\]
-
-也就是说，原本的检查门槛是 2.25μm，这里针对符合条件的斜边采用 2.241μm。
-这对应规则注释中的：
-It allows 0.009um DRC checking tolerance in INDMY region.
-第三部分：采用 OPPOSITE2 测量方式
-OPPOSITE2
-
-
-OPPOSITE2 是单向反向测量，从第二个输入图层向第一个输入图层进行测量。
-在 err5 中，第二个输入正是筛选后的约 45° ALPA 边缘。
-它有助于更精细地控制斜边参与距离计算的方式，而不是沿用普通的默认测量方法。
-
-技术栈
-
-
-
-第 7 行：err6，ALRDL 约 45° 斜边的间距
-err6 = EXT ALPA_in_MD_ov_3 (ANGLE ALRDL > 44 < 46) < 2.25-0.009 ABUT<90 OPPOSITE2 REGION MEASURE ALL
-
-
-这与 err5 的原理基本相同。
-不同之处是：
-- err5 筛选的是目标 ALPA 中约 45° 的边缘。
-- err6 筛选的是 ALRDL 中约 45° 的边缘。
-因此，err6 用来检查 ALRDL 斜边与目标 ALPA 之间的特定间距情况。
-阈值仍然是 2.241μm。
-第 8 行：err7，反向输入顺序的 ALPA 斜边间距
-err7 = EXT (ANGLE ALPA_in_MD_ov_3 > 44 < 46) ALRDL < 2.25-0.009 ABUT<90 OPPOSITE1 REGION MEASURE ALL
-
-
-这行继续使用约 45° 的斜边检查。
-区别是把选出的 ALPA 斜边放在了第一个输入位置，并采用：
-OPPOSITE1
-
-
-OPPOSITE1 从第一个输入图层向第二个输入图层测量。
-因此 err6、err7 分别考虑两种输入图层和测量方向组合。
-七组检查汇总
-检查	对象	特殊条件	阈值
-err1	ALPA ↔ ALPA	一般间距	2.25μm
-err2	ALPA ↔ ALRDL	MEASURE ALL	2.25μm
-err3	ALPA ↔ ALPA	ANGLED==0	2.25μm
-err4	ALPA ↔ ALRDL	ANGLED==0	2.25μm
-err5	ALPA ↔ ALPA 斜边	44°～46°、OPPOSITE2	2.241μm
-err6	ALPA ↔ ALRDL 斜边	44°～46°、OPPOSITE2	2.241μm
-err7	ALPA 斜边 ↔ ALRDL	44°～46°、OPPOSITE1	2.241μm
-第 9～15 行：根据 INDMY 区域筛选
-err1 NOT INSIDE INDMY
-err2 NOT INSIDE INDMY
-err3 NOT OUTSIDE INDMY
-err4 NOT OUTSIDE INDMY
-err5 NOT OUTSIDE INDMY
-err6 NOT OUTSIDE INDMY
-err7 NOT OUTSIDE INDMY
-
-
-这是 14nm 的另一处重要差异。
-这里需要理解两种 SVRF 运算：
-操作	含义
-NOT INSIDE INDMY	排除完全位于 INDMY 内的候选图形
-NOT OUTSIDE INDMY	排除完全位于 INDMY 外的候选图形
-需要注意，跨越 INDMY 边界的图形具有边界语义，因此它们不能简单理解为互不重叠的“内部”和“外部”两类。
-规则的总体意图可以概括为：
-一般区域： 使用 err1、err2 进行基本间距检查。
-INDMY 相关区域： 使用 err3～err7，针对正交边缘和约 45° 的斜边采用不同的检测条件。
-其中符合斜边检查条件的部分使用 0.009μm 的 DRC 检查容差，而不是整个 INDMY 区域的间距一律放宽 0.009μm。
-四、14nm 的完整执行流程
-输入 ALPA、MD、ALRDL
-
-构造 ALPA_in_MD_ov_3
-一般区域
-err1、err2
-ALPA ↔ ALPA
-ALPA ↔ ALRDL
-2.25μm
-
-
-INDMY 相关区域
-err3～err7
-正交边缘：2.25μm
-45° 斜边：2.241μm
-包含 OPPOSITE1/2
-
-
-
-对七组结果分别执行 INDMY 区域筛选
-输出最终 DRC 违规图形
-
-
-
-五、为什么 14nm 复杂这么多？
-主要有三个原因。
-1. 需要区分特殊区域。
-28nm 的这条规则主要执行两组间距计算，并排除 MARKS。
-14nm 则针对普通区域和 INDMY 特殊区域分别安排检查，因此有更多检查分支。
-2. 需要区分边缘的几何特征。
-14nm 不只是判断“两个图形相距多少”，还进一步区分正交边缘和约 45° 的斜边，并对斜边采用单向测量方式。
-3. 需要引入特殊测量容差。
-14nm 针对 INDMY 区域中的特定斜边测量允许 0.009μm 容差，因此需要针对这些情况单独设置阈值，而不能全部使用相同的 EXT < 2.25。
-六、最终对比
-对比项目	28nm ALPA_7	14nm ALPA_S_2
-自然语言要求	ALPA 最小间距	ALPA 最小间距
-标称间距	2.5μm	2.25μm
-主要检查数量	2 组	7 组
-特殊区域	MARKS 过滤	INDMY 分类处理
-斜边处理	未单独展开	约 45° 单独检查
-测量方向	常规 SINGULAR	另增加 OPPOSITE1/2
-额外容差	未在本规则明确指定	0.009μm
-代码复杂度	较低	较高
-可以向别人这样总结：
-28nm 和 14nm 的 ALPA 间距规则描述基本相同，都是检查指定金属图形之间是否满足最小间距。28nm 主要使用两组几何间距检查，而 14nm 将其细分为七组，分别处理一般区域、INDMY 特殊区域、正交边缘以及约 45° 的斜边，同时引入 0.009μm 的特定检查容差。因此，14nm 的规则实现更复杂，复杂度主要来源于对不同几何情况和特殊区域进行更精细的分类判断。
-
-最后有一个需要特别注意的技术结论：这两段代码证明的是这条 14nm 规则的检查逻辑更加细分，而不是证明所有 14nm DRC 规则都更复杂，也不能直接归因于 FinFET。 这组例子最有说服力的地方，就是相似的自然语言要求，在 SVRF 层面却需要明显不同数量和类型的几何操作。
+cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
+
+python3 - "$st_work" "$st_setup/maestro_read.json" "$st_preflight" "$st_batch" << 'PY'
+import json, re, sys, tempfile
+from pathlib import Path
+from types import SimpleNamespace
+
+sys.path.insert(0, "server/site")
+import collect_cascode_batch as cb
+from op_provider import lines
+
+session, read, preflight, batch = map(Path, sys.argv[1:])
+bound = cb.inputs(SimpleNamespace(
+    session=session,
+    maestro_read=read,
+    preflight=preflight
+))
+
+if not batch.is_absolute() or not (batch / "status.json").is_file():
+    sys.exit("STOP: batch output directory is missing")
+
+out = Path(tempfile.mkdtemp(prefix="dc_review_", dir=str(batch)))
+summary = [
+    "CHECKER=cascode-dc-evidence-v1",
+    "SPECTRE_RERUN=false"
+]
+
+for tag, path in (
+    ("EXPORTED", preflight / "bench.scs"),
+    ("DC_PROBE", batch / "dc/input.scs")
+):
+    inside = False
+    for line in lines(path.read_text()):
+        text = line.strip()
+        if text.startswith("subckt "):
+            inside = True
+        elif text.startswith("ends "):
+            inside = False
+        elif not inside and (
+            re.match(r"\S+\s+(options|tran|dc|stb|info)\b", text)
+            or text.startswith(("ic ", "nodeset "))
+        ):
+            summary.append(tag + " " + text)
+
+log = batch / "dc/input.log"
+if not log.is_file():
+    log = batch / "dc/spectre.log"
+
+raw = log.read_text(errors="replace").splitlines()
+summary += [
+    "DC_LOG_LINES=" + str(len(raw)),
+    "DC_LOG_TAIL_BEGIN"
+]
+summary += raw[-70:]
+summary.append("DC_LOG_TAIL_END")
+
+selection = bound["data"]["selection"]
+values = [
+    selection[k]
+    for k in ("bench_library", "bench_cell", "setup_view")
+]
+
+code = 'load(getShellEnvVar("ST_SKILL_INIT"))\n'
+code += 'let((setup ts result port)\nresult=errset(prog( ()\n'
+code += 'setup=maeOpenSetup('
+code += ' '.join(json.dumps(v) for v in values)
+code += ' ?mode "r")\n'
+code += 'unless(setup error("Cannot open saved setup read-only"))\n'
+code += 'ts=maeGetTestSession('
+code += json.dumps(bound["settings"]["test_name"])
+code += ' ?session setup)\n'
+code += 'unless(ts error("Cannot read saved test"))\n'
+code += 'asiWriteOceanScript(getShellEnvVar("ST_REVIEW_OCEAN") ts)\n'
+code += 'unless(isFile(getShellEnvVar("ST_REVIEW_OCEAN")) error("Missing saved test export"))\n'
+code += 'port=outfile(getShellEnvVar("ST_REVIEW_DONE"))\n'
+code += 'unless(port error("Cannot write completion marker"))\n'
+code += 'fprintf(port "OK\\n") close(port) port=nil t\n) t)\n'
+code += 'when(port close(port))\n'
+code += 'unless(and(result car(result)) printf("ST_REVIEW_FAILED\\n"))\n'
+code += ')\nexit()\n'
+
+(out / "read.il").write_text(code)
+(out / "cds.lib").write_text(
+    "INCLUDE " + json.dumps(str(bound["cds"])) + "\n"
+)
+
+saved = out / "saved_test.ocn"
+env = dict(
+    bound["env"],
+    ST_REVIEW_OCEAN=str(saved),
+    ST_REVIEW_DONE=str(out / "done")
+)
+
+try:
+    cb.command(
+        [
+            cb.executable(env, "ST_VIRTUOSO_BIN", "virtuoso"),
+            "-nograph",
+            "-replay", str(out / "read.il"),
+            "-log", str(out / "virtuoso.log")
+        ],
+        out,
+        env,
+        180,
+        out / "launcher.log"
+    )
+
+    if (
+        not saved.is_file()
+        or not saved.stat().st_size
+        or (out / "done").read_text().strip() != "OK"
+    ):
+        raise ValueError("saved test export is incomplete")
+
+    source = saved.read_text()
+    count = 0
+
+    for hit in re.finditer(
+        r"(?m)^\s*(analysis|option|envOption|temp|ic|nodeset)\s*\(",
+        source
+    ):
+        start = source.index("(", hit.start())
+        depth = 0
+        quoted = False
+        escaped = False
+        comment = False
+
+        for pos in range(start, len(source)):
+            char = source[pos]
+            if comment:
+                if char == "\n":
+                    comment = False
+            elif quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == ";":
+                comment = True
+            elif char == '"':
+                quoted = True
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        else:
+            raise ValueError("unclosed saved setting")
+
+        summary.append(
+            "SAVED_TEST "
+            + " ".join(source[hit.start():pos + 1].split())
+        )
+        count += 1
+
+    if not count:
+        raise ValueError("no saved analysis/options found in export")
+
+    cb.unchanged(bound)
+    summary += [
+        "SAVED_TEST_SCRIPT_READ_OK",
+        "SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true",
+        "FIXED_INPUTS_UNCHANGED=true"
+    ]
+
+except (OSError, ValueError) as error:
+    summary.append("SAVED_TEST_READ_INCOMPLETE=" + str(error))
+    summary += [
+        "NATIVE_ERROR " + item
+        for item in cb.brief_errors(out)
+    ]
+    count = -1
+
+shown = summary[:170]
+shown = [
+    s if len(s) <= 1200 else s[:1200] + " [DISPLAY_SHORTENED]"
+    for s in shown
+]
+shown += [
+    "SUMMARY_OMITTED_LINES=" + str(max(0, len(summary) - 170)),
+    "ELECTRICAL_VERIFIED=false",
+    "VBIAS_GENERATED=false",
+    "RAW_DETAILS_REMAIN_ON_SERVER=true"
+]
+
+(out / "summary.txt").write_text("\n".join(shown) + "\n")
+print("\n".join(shown))
+sys.exit(0 if count > 0 else 2)
+'PY'
+
+set st_rc = $status
+echo "求解设置检查退出码=$st_rc"
+**预期：**先等待 Virtuoso 完成只读导出，然后显示已有失败日志和 SAVED_TEST 设置。正常读取时末尾包含：
+SAVED_TEST_SCRIPT_READ_OK
+SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true
+FIXED_INPUTS_UNCHANGED=true
+ELECTRICAL_VERIFIED=false
+VBIAS_GENERATED=false
+RAW_DETAILS_REMAIN_ON_SERVER=true
+求解设置检查退出码=0
+**把本次完整输出一次发给我即可。**如果退出码不是 0，也直接发输出，先停在这一步。
