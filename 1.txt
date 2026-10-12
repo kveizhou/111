@@ -1,27 +1,36 @@
-1. 查看实际读取的电路和发现的 PDK 库
-set st_inputs = "$st_work/analysis/standalone_inputs"
-cat "$st_inputs/discovery.tsv"
-预期：显示表头，以及 source、technology、device 记录。
-其中 source 行应该对应：
-HiAplatRV500_ldo_sim    ...    ldo1_0_cbb_top    schematic
-device 行会显示本次实际发现的器件库名称和路径。
-2. 查看扫描文件的开头
-ls -lh "$st_inputs/pdk_probe.tsv"
-head -12 "$st_inputs/pdk_probe.tsv"
-预期：显示文件大小、表头和器件记录。表头应包含：
-oa_library
-oa_cell
-terminal_names
-parameter
-cdf_type
-has_schematic
-如果只有表头，也把输出发来。
-3. 汇总扫描内容
-下面是一整条命令：
-python3 -c 'import csv,sys; from collections import Counter; rows=list(csv.DictReader(open(sys.argv[1]),delimiter="\t")); masters={(r["oa_library"],r["oa_cell"]):r for r in rows}; print("PROBE_ROWS="+str(len(rows))); print("PROBE_MASTERS="+str(len(masters))); print("LIBRARIES="+str(sorted({r["oa_library"] for r in rows}))); print("HAS_SCHEMATIC="+str(dict(Counter(r["has_schematic"] for r in masters.values())))); print("PARAMETER_COUNTS="+str(dict(Counter(r["parameter"] for r in rows if r["parameter"] in ("w","l","nfin","fw","fingers","nf","m","r"))))); [print({k:r[k] for k in ("oa_library","oa_cell","model_name","terminal_names","has_schematic")}) for r in list(masters.values())[:20]]' "$st_inputs/pdk_probe.tsv"
-预期显示：
-PROBE_ROWS=实际记录数
-PROBE_MASTERS=实际master数
-LIBRARIES=实际库名列表
-HAS_SCHEMATIC=...
-PARAMETER_COUNTS=...
+cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
+set st_backend = "/tmpdata/maau_epc/users/k00981589/st-engine-maau/server/st_virtuoso_backend.sh"
+set st_session_cds = "$st_run/cadence/cds.lib"
+set st_diag = `mktemp -d "$st_run/source_context_XXXXXXXX"`
+echo "$st_diag"
+ls -lh "$st_session_cds"
+预期：
+.../source_context_XXXXXXXX
+.../cadence/cds.lib
+其中 XXXXXXXX 是自动生成的字符。如果出现 Undefined variable 或找不到 cds.lib，先停止。
+2. 创建仅用于读取的空策略文件
+printf 'oa_library\toa_cell\tkind\n' > "$st_diag/empty_policy.tsv"
+cat "$st_diag/empty_policy.tsv"
+预期：
+oa_library    oa_cell    kind
+这个文件没有指定任何器件类型。它用于读取当前层实际实例及连接，读取结果不会作为生成电路的放行依据。
+3. 读取新电路当前层的实际实例
+下面是一整条命令，完整复制执行：
+"$st_backend" snapshot --cds-lib "$st_session_cds" --lib HiAplatRV500_ldo_sim --cell ldo1_0_cbb_top --view schematic --core-subckt ldo1_0_cbb_top --device-policy "$st_diag/empty_policy.tsv" --netlist-output "$st_diag/top_actual.scs" --catalog-output "$st_diag/catalog.tsv" --geometry-output "$st_diag/geometry.tsv" >& "$st_diag/read.log"
+紧接着保存退出码：
+set st_diag_rc = $status
+echo "顶层只读检查退出码=$st_diag_rc"
+tail -30 "$st_diag/read.log"
+成功预期：
+顶层只读检查退出码=0
+如果不是 0，先停止，把日志末尾发来。
+4. 显示实际读取结果
+退出码为 0 后执行：
+ls -lh "$st_diag/top_actual.scs"
+cat "$st_diag/top_actual.scs"
+预期内容形式：
+// OA structural netlist generated read-only by st-engine-maau
+subckt ldo1_0_cbb_top ...
+实例名 ( 实际连接网络 ... ) oa_实际库名__实际Cell名
+...
+ends ldo1_0_cbb_top
