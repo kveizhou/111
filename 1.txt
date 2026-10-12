@@ -1,36 +1,30 @@
-cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-set st_backend = "/tmpdata/maau_epc/users/k00981589/st-engine-maau/server/st_virtuoso_backend.sh"
-set st_session_cds = "$st_run/cadence/cds.lib"
-set st_diag = `mktemp -d "$st_run/source_context_XXXXXXXX"`
-echo "$st_diag"
-ls -lh "$st_session_cds"
+
+1. 提取 ldo 的准确库名和 Cell 名
+下面是一整条命令：
+python3 -c 'import re,sys; from pathlib import Path; d=Path(sys.argv[1]); text=(d/"top_actual.scs").read_text(); hits=re.findall(r"(?m)^\s*ldo\s*\([^)]*\)\s+(oa_\S+)",text); len(hits)==1 or sys.exit("STOP: 无法唯一找到ldo实例"); parts=hits[0][3:].split("__"); len(parts)==2 and all(parts) or sys.exit("STOP: master名称无法准确拆分: "+hits[0]); lib,cell=parts; (d/"ldo_library.txt").write_text(lib+"\n"); (d/"ldo_cell.txt").write_text(cell+"\n"); print("LDO_LIBRARY="+lib); print("LDO_CELL="+cell)' "$st_diag"
+紧接着执行：
+set st_extract_rc = $status
+echo "名称提取退出码=$st_extract_rc"
 预期：
-.../source_context_XXXXXXXX
-.../cadence/cds.lib
-其中 XXXXXXXX 是自动生成的字符。如果出现 Undefined variable 或找不到 cds.lib，先停止。
-2. 创建仅用于读取的空策略文件
-printf 'oa_library\toa_cell\tkind\n' > "$st_diag/empty_policy.tsv"
-cat "$st_diag/empty_policy.tsv"
+LDO_LIBRARY=服务器读取出的实际库名
+LDO_CELL=服务器读取出的实际Cell名
+名称提取退出码=0
+如果出现 STOP 或退出码不是 0，先停止，把输出发来。
+2. 只读检查这个内部 Cell
+第 1 步成功后，逐条执行：
+set st_ldo_lib = `cat "$st_diag/ldo_library.txt"`
+set st_ldo_cell = `cat "$st_diag/ldo_cell.txt"`
+set st_ldo_diag = `mktemp -d "$st_run/ldo_context_XXXXXXXX"`
+echo "读取对象=$st_ldo_lib/$st_ldo_cell/schematic"
+然后完整复制下面这一条命令：
+"$st_backend" snapshot --cds-lib "$st_session_cds" --lib "$st_ldo_lib" --cell "$st_ldo_cell" --view schematic --core-subckt "$st_ldo_cell" --device-policy "$st_diag/empty_policy.tsv" --netlist-output "$st_ldo_diag/ldo_actual.scs" --catalog-output "$st_ldo_diag/catalog.tsv" --geometry-output "$st_ldo_diag/geometry.tsv" >& "$st_ldo_diag/read.log"
+紧接着执行：
+set st_ldo_rc = $status
+echo "内部LDO只读检查退出码=$st_ldo_rc"
 预期：
-oa_library    oa_cell    kind
-这个文件没有指定任何器件类型。它用于读取当前层实际实例及连接，读取结果不会作为生成电路的放行依据。
-3. 读取新电路当前层的实际实例
-下面是一整条命令，完整复制执行：
-"$st_backend" snapshot --cds-lib "$st_session_cds" --lib HiAplatRV500_ldo_sim --cell ldo1_0_cbb_top --view schematic --core-subckt ldo1_0_cbb_top --device-policy "$st_diag/empty_policy.tsv" --netlist-output "$st_diag/top_actual.scs" --catalog-output "$st_diag/catalog.tsv" --geometry-output "$st_diag/geometry.tsv" >& "$st_diag/read.log"
-紧接着保存退出码：
-set st_diag_rc = $status
-echo "顶层只读检查退出码=$st_diag_rc"
-tail -30 "$st_diag/read.log"
-成功预期：
-顶层只读检查退出码=0
-如果不是 0，先停止，把日志末尾发来。
-4. 显示实际读取结果
-退出码为 0 后执行：
-ls -lh "$st_diag/top_actual.scs"
-cat "$st_diag/top_actual.scs"
-预期内容形式：
-// OA structural netlist generated read-only by st-engine-maau
-subckt ldo1_0_cbb_top ...
-实例名 ( 实际连接网络 ... ) oa_实际库名__实际Cell名
-...
-ends ldo1_0_cbb_top
+内部LDO只读检查退出码=0
+如果不是 0，执行下面这条并把输出发来：
+tail -60 "$st_ldo_diag/read.log"
+3. 显示内部电路
+第 2 步退出码为 0 后执行：
+cat "$st_ldo_diag/ldo_actual.scs"
