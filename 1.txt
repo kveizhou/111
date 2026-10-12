@@ -1,54 +1,126 @@
-上传到服务器：
-/tmpdata/maau_epc/users/k00981589/LDO_Cascode_Batch_20261012.zip
-2. 解压新增脚本
-继续使用刚才测试的终端，保留已有的 $st_work、$st_setup、$st_preflight、$st_run。
-执行：
 cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-unzip -o /tmpdata/maau_epc/users/k00981589/LDO_Cascode_Batch_20261012.zip st-engine-maau/server/site/collect_cascode_batch.py -d /tmpdata/maau_epc/users/k00981589
+
+python3 - "$st_work" "$st_setup/maestro_read.json" "$st_preflight" "$st_batch" << PY
+import json, re, sys, tempfile
+from pathlib import Path
+from types import SimpleNamespace
+sys.path.insert(0, "server/site")
+import collect_cascode_batch as cb
+from op_provider import lines
+
+session, read, preflight, batch = map(Path, sys.argv[1:])
+bound = cb.inputs(SimpleNamespace(session=session, maestro_read=read, preflight=preflight))
+if not batch.is_absolute() or not (batch / "status.json").is_file():
+    sys.exit("STOP: batch output directory is missing")
+out = Path(tempfile.mkdtemp(prefix="dc_review_", dir=str(batch)))
+summary = ["CHECKER=cascode-dc-evidence-v1", "SPECTRE_RERUN=false"]
+
+for tag, path in (("EXPORTED", preflight / "bench.scs"), ("DC_PROBE", batch / "dc/input.scs")):
+    inside = False
+    for line in lines(path.read_text()):
+        text = line.strip()
+        if text.startswith("subckt "):
+            inside = True
+        elif text.startswith("ends "):
+            inside = False
+        elif not inside and (
+            re.match(r"\S+\s+(options|tran|dc|stb|info)\b", text)
+            or text.startswith(("ic ", "nodeset "))
+        ):
+            summary.append(tag + " " + text)
+
+log = batch / "dc/input.log"
+if not log.is_file():
+    log = batch / "dc/spectre.log"
+raw = log.read_text(errors="replace").splitlines()
+summary += ["DC_LOG_LINES=" + str(len(raw)), "DC_LOG_TAIL_BEGIN"]
+summary += raw[-70:]
+summary.append("DC_LOG_TAIL_END")
+
+selection = bound["data"]["selection"]
+values = [selection[k] for k in ("bench_library", "bench_cell", "setup_view")]
+code = 'load(getShellEnvVar("ST_SKILL_INIT"))\n'
+code += 'let((setup ts result port)\nresult=errset(prog( ()\n'
+code += 'setup=maeOpenSetup(' + ' '.join(json.dumps(v) for v in values) + ' ?mode "r")\n'
+code += 'unless(setup error("Cannot open saved setup read-only"))\n'
+code += 'ts=maeGetTestSession(' + json.dumps(bound["settings"]["test_name"]) + ' ?session setup)\n'
+code += 'unless(ts error("Cannot read saved test"))\n'
+code += 'asiWriteOceanScript(getShellEnvVar("ST_REVIEW_OCEAN") ts)\n'
+code += 'unless(isFile(getShellEnvVar("ST_REVIEW_OCEAN")) error("Missing saved test export"))\n'
+code += 'port=outfile(getShellEnvVar("ST_REVIEW_DONE"))\n'
+code += 'unless(port error("Cannot write completion marker"))\n'
+code += 'fprintf(port "OK\\n") close(port) port=nil t\n) t)\n'
+code += 'when(port close(port))\nunless(and(result car(result)) printf("ST_REVIEW_FAILED\\n"))\n)\nexit()\n'
+(out / "read.il").write_text(code)
+(out / "cds.lib").write_text("INCLUDE " + json.dumps(str(bound["cds"])) + "\n")
+saved = out / "saved_test.ocn"
+env = dict(bound["env"], ST_REVIEW_OCEAN=str(saved), ST_REVIEW_DONE=str(out / "done"))
+
+try:
+    cb.command(
+        [cb.executable(env, "ST_VIRTUOSO_BIN", "virtuoso"), "-nograph",
+         "-replay", str(out / "read.il"), "-log", str(out / "virtuoso.log")],
+        out, env, 180, out / "launcher.log"
+    )
+    if not saved.is_file() or not saved.stat().st_size or (out / "done").read_text().strip() != "OK":
+        raise ValueError("saved test export is incomplete")
+    source = saved.read_text()
+    count = 0
+    for hit in re.finditer(r"(?m)^\s*(analysis|option|envOption|temp|ic|nodeset)\s*\(", source):
+        start = source.index("(", hit.start())
+        depth = 0
+        quoted = escaped = comment = False
+        for pos in range(start, len(source)):
+            char = source[pos]
+            if comment:
+                if char == "\n":
+                    comment = False
+            elif quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == ";":
+                comment = True
+            elif char == '"':
+                quoted = True
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        else:
+            raise ValueError("unclosed saved setting")
+        summary.append("SAVED_TEST " + " ".join(source[hit.start():pos+1].split()))
+        count += 1
+    if not count:
+        raise ValueError("no saved analysis/options found in export")
+    cb.unchanged(bound)
+    summary += [
+        "SAVED_TEST_SCRIPT_READ_OK",
+        "SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true",
+        "FIXED_INPUTS_UNCHANGED=true"
+    ]
+except (OSError, ValueError) as error:
+    summary.append("SAVED_TEST_READ_INCOMPLETE=" + str(error))
+    summary += ["NATIVE_ERROR " + item for item in cb.brief_errors(out)]
+    count = -1
+
+shown = summary[:170]
+shown = [s if len(s) <= 1200 else s[:1200] + " [DISPLAY_SHORTENED]" for s in shown]
+shown += [
+    "SUMMARY_OMITTED_LINES=" + str(max(0, len(summary)-170)),
+    "ELECTRICAL_VERIFIED=false",
+    "VBIAS_GENERATED=false",
+    "RAW_DETAILS_REMAIN_ON_SERVER=true"
+]
+(out / "summary.txt").write_text("\n".join(shown) + "\n")
+print("\n".join(shown))
+sys.exit(0 if count > 0 else 2)
+PY
+
 set st_rc = $status
-echo "脚本安装退出码=$st_rc"
-预期包含：
-inflating: .../st-engine-maau/server/site/collect_cascode_batch.py
-脚本安装退出码=0
-退出码为 0 再继续。本次无需重新编译或扫描 PDK。
-3. 一次执行批量检查
-set st_batch_stamp = `date +%Y%m%d_%H%M%S`
-set st_batch = "$st_run/cascode_batch_${st_batch_stamp}"
-下面是一整条命令：
-python3 server/site/collect_cascode_batch.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --output "$st_batch"
-运行结束后立即执行：
-set st_rc = $status
-echo "批量检查退出码=$st_rc"
-过程中会显示各阶段进度，例如：
-CHECK_CONTEXT=START
-CHECK_CONTEXT=COMPLETE
-CHECK_PDK=START
-CHECK_PDK=COMPLETE
-CHECK_NATIVE=START
-CHECK_NATIVE=COMPLETE
-CHECK_DC=START
-CHECK_DC=START 后正在运行 Spectre，可能需要几分钟；超时会自动报告。
-全部收集顺利时，最终摘要包含：
-CHECKER=cascode-batch-v1
-RESULT=COLLECTED
-STAGE_INPUT=COMPLETE
-STAGE_CONTEXT=COMPLETE
-STAGE_PDK=COMPLETE
-STAGE_NATIVE=COMPLETE
-STAGE_DC=COMPLETE
-STAGE_OP=COMPLETE
-STAGE_UNCHANGED=COMPLETE
-DC_PROBE=CONVERGED
-还会显示实际数值：
-OP_TARGET I21 device=... id=... vgs=... vds=... vdsat=...
-OP_TARGET I105 device=... id=... vgs=... vds=... vdsat=...
-末尾仍会显示：
-ELECTRICAL_VERIFIED=false
-VBIAS_GENERATED=false
-RAW_DETAILS_REMAIN_ON_SERVER=true
-批量检查退出码=0
-这表示原电路诊断完成；尚未生成或验证 VBIAS。
-如果某阶段失败，会显示：
-RESULT=COLLECTED_WITH_ISSUES
-ISSUE ...=具体原因
-批量检查退出码=2
+echo "求解设置检查退出码=$st_rc"
