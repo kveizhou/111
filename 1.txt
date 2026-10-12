@@ -1,56 +1,54 @@
-将它上传到服务器：
-/tmpdata/maau_epc/users/k00981589/
-保留压缩包原来的文件名。
-2. 提取本次新增脚本
-在刚才成功读取 Maestro 的同一个终端执行：
+上传到服务器：
+/tmpdata/maau_epc/users/k00981589/LDO_Cascode_Batch_20261012.zip
+2. 解压新增脚本
+继续使用刚才测试的终端，保留已有的 $st_work、$st_setup、$st_preflight、$st_run。
+执行：
 cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-unzip -o "/tmpdata/maau_epc/users/k00981589/LDO服务器测试包_Cascode前置网表检查_2026-10-12.zip" st-engine-maau/server/site/preflight_cascode_bench.py -d /tmpdata/maau_epc/users/k00981589
-预期出现类似：
-inflating: /tmpdata/maau_epc/users/k00981589/st-engine-maau/server/site/preflight_cascode_bench.py
-检查文件：
-ls -lh server/site/preflight_cascode_bench.py
-预期：显示这个 Python 文件。
-3. 检查之前的会话和配置缓存
-ls -lh "$st_work/session.conf" "$st_setup/maestro_read.json"
-预期：显示两个文件。
-如果出现 Undefined variable 或文件不存在，停在这里，把输出发给我。
-4. 创建本次检查名称
-set st_pre_stamp = `date +%Y%m%d_%H%M%S`
-set st_preflight = "$st_run/cascode_preflight_${st_pre_stamp}"
-mkdir -p "$st_run/logs"
-echo "$st_preflight"
-预期：打印一个以 cascode_preflight_日期_时间 结尾的新路径。脚本会创建这个目录。
-5. 读取真实配置网表
-下面是一整条命令，完整复制：
-python3 server/site/preflight_cascode_bench.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --test presim --corner Copy_PT_FUNC_703 --output "$st_preflight" >& "$st_run/logs/cascode_preflight_${st_pre_stamp}.log"
-执行结束后，先保存退出码：
+unzip -o /tmpdata/maau_epc/users/k00981589/LDO_Cascode_Batch_20261012.zip st-engine-maau/server/site/collect_cascode_batch.py -d /tmpdata/maau_epc/users/k00981589
 set st_rc = $status
-cat "$st_run/logs/cascode_preflight_${st_pre_stamp}.log"
-echo "配置网表检查退出码=$st_rc"
-成功时预期包含：
-READ_CONFIG_NETLIST=START
-READ_CONFIG_NETLIST=COMPLETE
-CHECKER=cascode-bench-preflight-v1
-RESULT=NETLIST_READ_OK
-DESIGN=HiAplatRV500_ldo_sim/ldo1_1_stb_dc_sim_cbb/config_presim
-TEST=presim
-CORNER=Copy_PT_FUNC_703
-TEMPERATURE=125.0
-变量部分应包含：
-VARIABLE AVDD=1.14
-VARIABLE iout=10m
-VARIABLE IOUT=200m
-另外会列出：
-CORE_PATH=实际核心层级路径
-SOURCE_COUNT=实际源器件数量
-SOURCE ...
-SOURCE_VARIABLE_USAGE ...
-CORE_DEVICE ...
-末尾预期：
-SIMULATION_PROFILE_READY=false
-SAVED_SIMULATION_OPTIONS_IMPORTED=false
-EXCITATION_REVIEW_REQUIRED=true
+echo "脚本安装退出码=$st_rc"
+预期包含：
+inflating: .../st-engine-maau/server/site/collect_cascode_batch.py
+脚本安装退出码=0
+退出码为 0 再继续。本次无需重新编译或扫描 PDK。
+3. 一次执行批量检查
+set st_batch_stamp = `date +%Y%m%d_%H%M%S`
+set st_batch = "$st_run/cascode_batch_${st_batch_stamp}"
+下面是一整条命令：
+python3 server/site/collect_cascode_batch.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --output "$st_batch"
+运行结束后立即执行：
+set st_rc = $status
+echo "批量检查退出码=$st_rc"
+过程中会显示各阶段进度，例如：
+CHECK_CONTEXT=START
+CHECK_CONTEXT=COMPLETE
+CHECK_PDK=START
+CHECK_PDK=COMPLETE
+CHECK_NATIVE=START
+CHECK_NATIVE=COMPLETE
+CHECK_DC=START
+CHECK_DC=START 后正在运行 Spectre，可能需要几分钟；超时会自动报告。
+全部收集顺利时，最终摘要包含：
+CHECKER=cascode-batch-v1
+RESULT=COLLECTED
+STAGE_INPUT=COMPLETE
+STAGE_CONTEXT=COMPLETE
+STAGE_PDK=COMPLETE
+STAGE_NATIVE=COMPLETE
+STAGE_DC=COMPLETE
+STAGE_OP=COMPLETE
+STAGE_UNCHANGED=COMPLETE
+DC_PROBE=CONVERGED
+还会显示实际数值：
+OP_TARGET I21 device=... id=... vgs=... vds=... vdsat=...
+OP_TARGET I105 device=... id=... vgs=... vds=... vdsat=...
+末尾仍会显示：
 ELECTRICAL_VERIFIED=false
 VBIAS_GENERATED=false
 RAW_DETAILS_REMAIN_ON_SERVER=true
-配置网表检查退出码=0
+批量检查退出码=0
+这表示原电路诊断完成；尚未生成或验证 VBIAS。
+如果某阶段失败，会显示：
+RESULT=COLLECTED_WITH_ISSUES
+ISSUE ...=具体原因
+批量检查退出码=2
