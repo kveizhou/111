@@ -1,3 +1,7 @@
-unzip -o ../LDO_Cascode_SectionLabels_20261013.zip -d ..
+cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
+
+unzip -oq ../LDO_Cascode_FeasibleRuntime_20261013.zip -d ..
+
 python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --prepare-runtime
-echo "基线封存退出码=$status"
+
+echo "现场接入退出码=$status"
