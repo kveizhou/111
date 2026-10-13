@@ -1,7 +1,4 @@
-关键难点与解决思路
-- 结构变化后的偏置问题
-  新增 Cascode 需要合适的栅极电压。采用独立自给电 VBIAS，自动求解可行参数，无需外部参考电流。
-- 方案与真实工艺的适配问题
-  从当前 PDK 已核实器件或固定候选集中选择器件，结合端子、尺寸、耐压及 Bulk 规则约束生成结果。
-- 生成结果的可信性问题
-  保留源电路，通过派生电路和子 Cell 回读确认连接，再结合仿真判断工作点是否满足要求。
+cd /tmpdata/maau_epc/users/k00981589
+unzip -oq LDO_Cascode_ExperimentalCDF_20261014.zip
+python3 st-engine-maau/server/site/prepare_cascode_experiment.py --session "$st_work" --batch "$st_batch"
+echo "实验准备退出码=$status"
