@@ -1,34 +1,14 @@
-下载现有文件：[read_cascode_solver_settings.py](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/read_cascode_solver_settings.py)，上传到服务器：
-/tmpdata/maau_epc/users/k00981589/st-engine-maau/
-在 csh/tcsh 终端执行：
-cd /tmpdata/maau_epc/users/k00981589/st-engine-maau
-
-cp -p read_cascode_solver_settings.py server/site/read_cascode_solver_settings.py
-python3 -m py_compile server/site/read_cascode_solver_settings.py
+st-engine-maau/server/site/read_cascode_solver_settings.py
+无需重新编译或扫描 PDK。沿用当前终端的 st_* 变量，在工程目录执行：
+set st_dc_stamp = `date +%Y%m%d_%H%M%S`
+python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --run-dc --dc-timeout 600 >& "$st_run/logs/saved_dc_${st_dc_stamp}.log"
 set st_rc = $status
-echo "语法检查退出码=$st_rc"
-预期退出码为 0。然后恢复原日志里已经确认的目录变量：
-set st_run = "/tmpdata/maau_epc/users/k00981589/st-engine-maau-runs/ocldo_top_hYnydgs6"
-set st_work = "$st_run/work_core_20261012_134958"
-set st_setup = "$st_run/maestro_setup_20261012_153943"
-set st_preflight = "$st_run/cascode_preflight_20261012_165637"
-set st_batch = "$st_run/cascode_batch_20261012_183021"
-
-ls -lh "$st_work/session.conf" "$st_setup/maestro_read.json" "$st_preflight/bench.scs" "$st_batch/status.json"
-四个文件都存在后，执行读取：
-set st_read_stamp = `date +%Y%m%d_%H%M%S`
-
-python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" >& "$st_run/logs/solver_settings_${st_read_stamp}.log"
-set st_rc = $status
-
-cat "$st_run/logs/solver_settings_${st_read_stamp}.log"
-echo "求解设置读取退出码=$st_rc"
-成功时应包含：
-READ_SAVED_SETTINGS=COMPLETE
-RESULT=READ_OK
-SELECTED_CORNER=Copy_PT_FUNC_703
-SAVED_TEST_SCRIPT_READ_OK
-SAVED_SETTINGS_CAPTURED_NOT_APPLIED=true
-ELECTRICAL_VERIFIED=false
-VBIAS_GENERATED=false
-求解设置读取退出码=0
+cat "$st_run/logs/saved_dc_${st_dc_stamp}.log"
+echo "基线DC退出码=$st_rc"
+成功应出现：
+RESULT=BASELINE_READ_OK
+BASELINE_DC=CONVERGED
+OP_TARGET I21 ...
+OP_TARGET I105 ...
+基线DC退出码=0
+若出现 INCOMPLETE 或退出码非零，停在这里，把整份摘要及退出码贴回来。程序会附上失败阶段与有限日志尾部，原始文件仍留服务器。即使成功，ELECTRICAL_VERIFIED=false、VBIAS_GENERATED=false 也正常，下一步还需判读工作点并补齐 PDK 电气规则。
