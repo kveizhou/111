@@ -1,2 +1,5 @@
-python3 /tmpdata/maau_epc/users/k00981589/inspect_cascode_pdk_evidence_v2.py --session "$st_work" --batch "$st_batch"
-echo "器件资料读取退出码=$status"
+set st_src_stamp = `date +%Y%m%d_%H%M%S`
+python3 /tmpdata/maau_epc/users/k00981589/read_cascode_pdk_sources.py --session "$st_work" --batch "$st_batch" >& "$st_run/logs/pdk_sources_${st_src_stamp}.log"
+set st_rc = $status
+cat "$st_run/logs/pdk_sources_${st_src_stamp}.log"
+echo "定向资料读取退出码=$st_rc"
