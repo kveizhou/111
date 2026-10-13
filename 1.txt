@@ -1,5 +1,3 @@
-set st_node_stamp = `date +%Y%m%d_%H%M%S`
-python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --read-node-context >& "$st_run/logs/node_context_${st_node_stamp}.log"
-set st_rc = $status
-cat "$st_run/logs/node_context_${st_node_stamp}.log"
-echo "节点上下文读取退出码=$st_rc"
+unzip -o ../LDO_Cascode_RuntimeBridge_20261013.zip -d ..
+python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --prepare-runtime
+echo "正式读取接入退出码=$status"
