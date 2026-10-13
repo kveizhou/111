@@ -1,2 +1,5 @@
-set st_review = `ls -td "$st_batch"/dc_review_ports_* | head -1`
-python3 -m json.tool "$st_review/settings_forms.json"
+set st_dc_stamp = `date +%Y%m%d_%H%M%S`
+python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --run-dc --dc-timeout 600 >& "$st_run/logs/saved_dc_${st_dc_stamp}.log"
+set st_rc = $status
+cat "$st_run/logs/saved_dc_${st_dc_stamp}.log"
+echo "基线DC退出码=$st_rc"
