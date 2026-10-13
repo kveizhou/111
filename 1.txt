@@ -1,6 +1,5 @@
-set st_help_stamp = `date +%Y%m%d_%H%M%S`
-spectre -h bsimcmg >& "$st_run/logs/bsimcmg_help_${st_help_stamp}.log"
-set st_help_rc = $status
-head -n 8 "$st_run/logs/bsimcmg_help_${st_help_stamp}.log"
-grep -n -A 3 -B 1 -E '(^|[[:space:]])(region|reversed|vdssat|vdst|vgst|vds|vgs)([[:space:]=]|$)' "$st_run/logs/bsimcmg_help_${st_help_stamp}.log" | head -n 120
-echo "模型帮助退出码=$st_help_rc"
+set st_node_stamp = `date +%Y%m%d_%H%M%S`
+python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --read-node-context >& "$st_run/logs/node_context_${st_node_stamp}.log"
+set st_rc = $status
+cat "$st_run/logs/node_context_${st_node_stamp}.log"
+echo "节点上下文读取退出码=$st_rc"
