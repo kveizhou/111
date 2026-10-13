@@ -1,16 +1,5 @@
-下载[更新后的 Python 文件](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/read_cascode_solver_settings.py)，覆盖服务器的：
-st-engine-maau/server/site/read_cascode_solver_settings.py
-然后执行下面的仅重读命令，无需重新编译、扫描或运行 DC：
 set st_op_stamp = `date +%Y%m%d_%H%M%S`
 python3 server/site/read_cascode_solver_settings.py --session "$st_work" --maestro-read "$st_setup/maestro_read.json" --preflight "$st_preflight" --batch "$st_batch" --read-op-only >& "$st_run/logs/saved_op_${st_op_stamp}.log"
 set st_rc = $status
 cat "$st_run/logs/saved_op_${st_op_stamp}.log"
 echo "工作点读取退出码=$st_rc"
-程序自动选择并核对当前批次最新的已收敛基线。成功时应出现：
-SPECTRE_RERUN=false
-BASELINE_DC=CONVERGED
-OP_READ=COMPLETE
-PSF_UNCHANGED=true
-RESULT=BASELINE_READ_OK
-还应有 I21、I105 的 OP_TARGET 数据，退出码为 0。把完整摘要和退出码贴回来即可；若失败，新版会优先显示 OP 读取日志。
-本地 14 项专项及完整回归通过，真实 OP 续读仍待验证。[完整源码包](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/LDO_Cascode_OPResume_20261013.zip)已更新并校验。本地提交 497ecb5；未配置远程，未推送。电气验收和 VBIAS 生成仍未完成。
