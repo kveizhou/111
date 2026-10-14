@@ -1,4 +1,5 @@
 cd /tmpdata/maau_epc/users/k00981589
-python3 inspect_cascode_ports.py --engine st-engine-maau --batch "$st_batch"
+unzip -oq LDO_Cascode_BusPorts_20261014.zip
+python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --upgrade-port-reader
 set st_rc = $status
-echo "端口取证退出码=$st_rc"
+echo "端口修复续跑退出码=$st_rc"
