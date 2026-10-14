@@ -1,3 +1,5 @@
-set st_exp = "$st_batch/dc_review_ports_490apopc/experiment_inputs_p5ymshbg"
-python3 -m json.tool "$st_exp/pdk_facts.draft.json"
-python3 -m json.tool "$st_exp/preparation.json"
+cd /tmpdata/maau_epc/users/k00981589
+unzip -oq LDO_Cascode_BindInputs_20261014.zip
+python3 st-engine-maau/server/site/prepare_cascode_experiment.py --session "$st_work" --batch "$st_batch" --bind-native --native-timeout 180
+set st_rc = $status
+echo "实验绑定退出码=$st_rc"
