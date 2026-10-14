@@ -1,2 +1,1 @@
-set st_bind_report = `ls -t "$st_batch"/candidate_*/binding_review_*/binding_evidence.json | head -1`
-python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); [print(json.dumps(x)) for x in d["differences"] if x["status"] in ("unresolved","ambiguous","identity_conflict")]' "$st_bind_report"
+set st_candidate = ls -td "$st_batch"/candidate_* | head -1 python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); fs=[p/"work/before/core_before.scs",max((p/"work/analysis/baseline_op/raw_op").glob("st-op-simulation./dut.scs"),key=lambda x.stat().st_mtime)]; [(print("FILE="+str(f)),[print(s) for s in f.read_text().splitlines() if re.match(r"^\sR(?:0|1|3|4)(?:\s|_)",s)]) for f in fs]' "$st_candidate"
