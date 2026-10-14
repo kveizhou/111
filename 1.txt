@@ -1,2 +1,2 @@
-et st_bind_report = ls -t "$st_batch"/candidate_*/binding_review_*/binding_evidence.json | head -1 python3 -c 'import json,sys; 
-d=json.load(open(sys.argv[1])); [print(json.dumps(x)) for x in d["differences"] if x["status"] in ("unresolved","ambiguous","identity_conflict")]' "$st_bind_report"
+set st_bind_report = `ls -t "$st_batch"/candidate_*/binding_review_*/binding_evidence.json | head -1`
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); [print(json.dumps(x)) for x in d["differences"] if x["status"] in ("unresolved","ambiguous","identity_conflict")]' "$st_bind_report"
