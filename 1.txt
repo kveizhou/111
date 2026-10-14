@@ -1,6 +1,5 @@
 cd /tmpdata/maau_epc/users/k00981589
-unzip -o ldo_reuse_patch_20261014.zip
-解压成功后，直接续跑：
+unzip -o ldo_reuse_patch_20261014_r2.zip
 python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
 set st_rc = $status
 echo "续跑退出码=$st_rc"
