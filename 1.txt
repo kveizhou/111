@@ -1,1 +1,1 @@
-unzip -o ldo_dc_query_name_fix_20261014.zip && python3 st-engine-maau/scripts/inspect_cascode_candidate_bindings.py --engine st-engine-maau --candidate "$st_batch/candidate_I21_xbb892w0" --require-pass && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
+unzip -o ldo_reader_resume_fix_20261014.zip && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
