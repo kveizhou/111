@@ -1,5 +1,5 @@
 cd /tmpdata/maau_epc/users/k00981589
-unzip -oq LDO_Cascode_FirstExperiment_20261014.zip
-python3 st-engine-maau/server/site/run_cascode_experiment.py --session "$st_work" --batch "$st_batch"
+unzip -oq LDO_Cascode_RunRoot_20261014.zip
+python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch"
 set st_rc = $status
-echo "I21实验退出码=$st_rc"
+echo "续跑退出码=$st_rc"
