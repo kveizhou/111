@@ -1,1 +1,1 @@
-unzip -o ldo_length_range_fix_20261014.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
+tail -n 100 "$st_batch/candidate_I21_xbb892w0/work/logs/materialize.log"
