@@ -1,5 +1,5 @@
 cd /tmpdata/maau_epc/users/k00981589
-unzip -oq LDO_Cascode_BindInputs_20261014.zip
-python3 st-engine-maau/server/site/prepare_cascode_experiment.py --session "$st_work" --batch "$st_batch" --bind-native --native-timeout 180
+unzip -oq LDO_Cascode_BindResume_20261014.zip
+python3 st-engine-maau/server/site/prepare_cascode_experiment.py --session "$st_work" --batch "$st_batch" --reuse-native
 set st_rc = $status
-echo "实验绑定退出码=$st_rc"
+echo "缓存绑定退出码=$st_rc"
