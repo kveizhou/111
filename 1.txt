@@ -1,4 +1,1 @@
-cd /tmpdata/maau_epc/users/k00981589
-python3 inspect_cascode_bindings.py --engine st-engine-maau --batch "$st_batch"
-set st_rc = $status
-echo "器件绑定取证退出码=$st_rc"
+set st_bind_report = ls -t "$st_batch"/candidate_*/binding_review_*/binding_evidence.json | head -1 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); [print(json.dumps(x)) for x in d["differences"] if x["status"] in ("unresolved","ambiguous","identity_conflict")]' "$st_bind_report"
