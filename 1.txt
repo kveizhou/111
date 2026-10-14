@@ -1,3 +1,5 @@
-set st_bind = `ls -td "$st_batch"/dc_review_ports_*/experiment_inputs_* | head -1`
-python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("PENDING:",d.get("required_bindings")); print("ERROR:",d.get("native_error"))' "$st_bind/binding_evidence.json"
-grep -E 'terminal.*"I105"|cdf_mapping.*"I105".*"termOrder"' "$st_bind/native.tsv"
+cd /tmpdata/maau_epc/users/k00981589
+unzip -oq LDO_Cascode_BulkAlias_20261014.zip
+python3 st-engine-maau/server/site/prepare_cascode_experiment.py --session "$st_work" --batch "$st_batch" --reuse-native
+set st_rc = $status
+echo "缓存绑定退出码=$st_rc"
