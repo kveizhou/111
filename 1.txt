@@ -1,4 +1,6 @@
 cd /tmpdata/maau_epc/users/k00981589
-python3 inspect_cascode_resistor_groups.py --engine st-engine-maau --batch "$st_batch"
+unzip -o ldo_reuse_patch_20261014.zip
+解压成功后，直接续跑：
+python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
 set st_rc = $status
-echo "电阻分段读取退出码=$st_rc"
+echo "续跑退出码=$st_rc"
