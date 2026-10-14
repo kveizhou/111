@@ -1,5 +1,1 @@
-cd /tmpdata/maau_epc/users/k00981589
-unzip -o ldo_bulk_handoff_fix_20261014.zip
-bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
-set st_rc = $status
-echo "编译并续跑退出码=$st_rc"
+python3 -c 'import json,sys; rows=[json.loads(s) for s in open(sys.argv[1]) if s.strip()]; [print(json.dumps({k:d.get(k) for k in ("candidate","dc_evaluated","converged","reason","host_message","constraints")},ensure_ascii=False)) for d in rows]' "$st_batch/candidate_I21_xbb892w0/work/analysis/solver_trace.jsonl"
