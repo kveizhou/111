@@ -3,3 +3,6 @@
 2. 安排上下两只管各自承担多少电压。 两只管都需要足够的工作电压，不能让其中一只几乎没有压降。
 3. 估算栅极电压。 对 NMOS，栅极电压 = 源极电压 + VGS；所需 VGS 根据电流、尺寸和实际 PDK 模型确定。
 4. 用真实偏置电路产生该电压，再仿真调整。 例如使用复制管、电流镜和电阻。Cascode 偏置的核心就是安排好这些电压和电流
+
+
+unzip -o ldo_resistor_callback_context_fix_20261015.zip && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
