@@ -1,1 +1,0 @@
-unzip -o ldo_reference_resistor_trials_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --reference-resistor-scales 8,4,16
