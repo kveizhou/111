@@ -1,1 +1,1 @@
-unzip -o ldo_minimum_vbias_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
+unzip -o ldo_numeric_readback_fix_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
