@@ -1,1 +1,1 @@
-unzip -o ldo_fresh_dc_search_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --fresh-search
+python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --fresh-search
