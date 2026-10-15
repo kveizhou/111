@@ -1,1 +1,2 @@
-unzip -o ldo_packaged_target_fix_20261014.zip && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
+unzip -o ldo_solver_result_20261015.zip
+python3 st-engine-maau/scripts/resume_cascode_experiment.py --candidate "$st_batch/candidate_I21_xbb892w0" --show-last-result
