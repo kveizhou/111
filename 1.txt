@@ -1,3 +1,4 @@
-unzip -o ldo_resistor_geometry_fix_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --reference-resistor-scales 8,4,16
+cd /tmpdata/maau_epc/users/k00981589
+unzip -o ldo_focused_trials_20261015.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --reference-resistor-scales 8,4,16
 set st_rc = $status
 echo "退出码=$st_rc"
