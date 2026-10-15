@@ -1,3 +1,1 @@
-unzip -o ldo_shared_subckt_fix_20261015.zip && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --reference-resistor-scales 8,4,16
-set st_rc = $status
-echo "退出码=$st_rc"
+python3 -c 'import json,pathlib,sys; p=max(pathlib.Path(sys.argv[1]).glob("candidate_*/work/analysis/solver_trace.jsonl"),key=lambda p.stat().st_mtime); rows=[json.loads(s) for s in p.read_text().splitlines() if s.strip()]; [print(json.dumps({"point".get("candidate"),"R".get("params",{}).get("resistor",{}).get("r"),"margin":{k for k,v in (d.get("stress_measurements") or {}).items() if k.endswith(".saturation_margin")},"I_R":(d.get("stress_measurements") or {}).get("resistor.current")},ensure_ascii=False)) for d in rows]' "$st_batch"
