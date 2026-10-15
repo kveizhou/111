@@ -1,1 +1,3 @@
-
+set st_last_eval = `ls -td "$st_batch"/candidate_*/work/analysis/candidates/candidate_* | head -1`
+grep -n -m 1 -A 4 'R_REF_N' "$st_last_eval/roundtrip/complete.scs" | head -n 5
+grep -n -m 1 -A 4 'R_REF_N' "$st_last_eval"/raw_op/st-op-simulation.*/dut.scs | head -n 5
