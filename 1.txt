@@ -1,1 +1,17 @@
-python3 -c 'import csv,json,sys,pathlib,collections; w=pathlib.Path(sys.argv[1])/"work"; rows=list(csv.DictReader(open(w/"before/mos_inventory.tsv"),delimiter="\t")); ds=json.load(open(w/"analysis/pdk_catalog.json"))["devices"]; print("TARGET_COUNTS="+str(dict(collections.Counter(r["polarity"] for r in rows)))); [print("MASTER",d["master"],d["kind"],d.get("oa_library"),d.get("oa_cell")) for d in ds]; [print("TARGET",r["instance"],"CROSS="+r.get("cross_flavor_candidates",""),"REJECT="+r.get("candidate_rejections","")) for r in rows]' "$st_batch/candidate_I21_xbb892w0"
+① 上传服务器后，执行整行：
+unzip -o ldo_mixed_master_admission_20261016.zip && bash st-engine-maau/scripts/test_mixed_cascode.sh four "$st_batch/candidate_I21_xbb892w0"
+接入成功会出现 MIXED_ADMISSION=PASS。四组生成及真实 DC 都通过后，末尾应出现：
+TEST_GROUPS=4
+GENERATED_SUBCELLS=8
+MIXED_CASCODE_TEST=PASS
+② 第一步 PASS 后，撤销一组：
+bash st-engine-maau/scripts/test_mixed_cascode.sh three "$st_batch/candidate_I21_xbb892w0"
+预期：TEST_GROUPS=3、MIXED_CASCODE_TEST=PASS。
+③ 第二步 PASS 后，再撤销一组：
+bash st-engine-maau/scripts/test_mixed_cascode.sh two "$st_batch/candidate_I21_xbb892w0"
+预期：
+TEST_GROUPS=2
+MIXED_CASCODE_TEST=PASS
+FINAL_RETAINED=same_type_NMOS,cross_flavor_PMOS
+到这里停止撤销，保留一组同型 NMOS、一组异型 PMOS。
+本地 98 项相关测试通过；服务器实际四组电路仍待这次验证。任一步未 PASS，就先不要执行下一步。
