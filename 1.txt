@@ -1,1 +1,1 @@
-unzip -o ldo_final_cell_retry_fix_20261016.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
+python3 st-engine-maau/server/site/standalone.py open --session "$st_batch/candidate_I21_xbb892w0/work"
