@@ -1,1 +1,1 @@
-python3 st-engine-maau/server/site/standalone.py open --session "$st_batch/candidate_I21_xbb892w0/work"
+grep -E '^(ok|stage|generated_cells|structural_ready|nominal_dc_ready|experimental_dc_ready|failed_constraints|target)=' "$st_batch/candidate_I21_xbb892w0/work/reports/validation.txt"
