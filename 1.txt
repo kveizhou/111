@@ -1,1 +1,1 @@
-python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs --fresh-search
+unzip -o ldo_final_cell_retry_fix_20261016.zip && bash st-engine-maau/scripts/build.sh --tool-only && python3 st-engine-maau/scripts/resume_cascode_experiment.py --batch "$st_batch" --reuse-verified-inputs
