@@ -1,1 +1,1 @@
-unzip -o ldo_mixed_mega_retry_fix_20261016.zip && bash st-engine-maau/scripts/build.sh --tool-only && bash st-engine-maau/scripts/test_mixed_cascode.sh retry-four "$st_batch/candidate_I21_xbb892w0"
+unzip -o ldo_mixed_batch_stop_fix_20261016.zip && bash st-engine-maau/scripts/build.sh --tool-only && bash st-engine-maau/scripts/test_mixed_cascode.sh retry-four "$st_batch/candidate_I21_xbb892w0"
