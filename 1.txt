@@ -1,1 +1,28 @@
-grep -E '^(ok|stage|generated_cells|structural_ready|nominal_dc_ready|experimental_dc_ready|failed_constraints|target)=' "$st_batch/candidate_I21_xbb892w0/work/reports/validation.txt"
+四组使用四个不同 MOS，VBIAS 自动搜索。
+1．上传更新包，然后解压、编译：
+unzip -o ldo_multi_cascode_test_20261016.zip && bash st-engine-maau/scripts/build.sh --tool-only
+2．生成四组：
+bash st-engine-maau/scripts/test_mixed_cascode.sh four "$st_batch/candidate_I21_xbb892w0"
+成功预期：
+TEST_GROUPS=4
+GENERATED_SUBCELLS=8
+MIXED_CASCODE_TEST=PASS
+3．撤销第四组并重新生成：
+bash st-engine-maau/scripts/test_mixed_cascode.sh three "$st_batch/candidate_I21_xbb892w0"
+成功预期：
+已撤销最后一次修改，剩余操作数=3
+TEST_GROUPS=3
+GENERATED_SUBCELLS=6
+MIXED_CASCODE_TEST=PASS
+4．再撤销第三组并重新生成，到这里停止：
+bash st-engine-maau/scripts/test_mixed_cascode.sh two "$st_batch/candidate_I21_xbb892w0"
+成功预期：
+已撤销最后一次修改，剩余操作数=2
+TEST_GROUPS=2
+GENERATED_SUBCELLS=4
+MIXED_CASCODE_TEST=PASS
+FINAL_RETAINED=same_type_NMOS,cross_flavor_PMOS
+5．打开最终保留两组的电路：
+python3 st-engine-maau/server/site/standalone.py open --session "$st_batch/candidate_I21_xbb892w0/work"
+每步看到 MIXED_CASCODE_TEST=PASS 再执行下一步。若准备阶段显示 MIXED_FOUR_READY=false，说明当前目录缺少所需目标或合格异型型号，会在仿真前停止，并保留旧操作。
+注意：每组最多搜索16次，四组最多64次，另有最终组合DC验证。 本地161项C++检查、34项Python测试和编译已通过；真实四组DC仍需上述服务器验证。源码已同步到主目录，提交 06b4150，无远程仓库，未推送。
