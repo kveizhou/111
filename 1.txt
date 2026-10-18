@@ -1,1 +1,1 @@
-unzip -o ldo_short_cascode_undo_20261018.zip && bash st-engine-maau/scripts/test_mixed_cascode.sh same-cross-undo "$st_batch/candidate_I21_xbb892w0"
+unzip -o ldo_combined_features_test_20261018.zip && bash st-engine-maau/scripts/test_mixed_cascode.sh combo "$st_batch/candidate_I21_xbb892w0"
