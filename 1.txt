@@ -1,1 +1,1 @@
-unzip -o ldo_source_resistor_precision_fix_20261018.zip && bash st-engine-maau/scripts/build.sh --tool-only && bash st-engine-maau/scripts/test_mixed_cascode.sh combo "$st_batch/candidate_I21_xbb892w0"
+unzip -o ldo_combined_alternate_targets_20261018.zip && bash st-engine-maau/scripts/test_mixed_cascode.sh combo-alt "$st_batch/candidate_I21_xbb892w0"
