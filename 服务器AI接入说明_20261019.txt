@@ -1,0 +1,90 @@
+st-engine-maau 当前源码交付与服务器 AI 接入说明
+交付日期：2026-10-19（北京时间）
+源码提交：6add7e6e2e4ffb2950a297444cd1aee5345dbb30
+
+一、给服务器 AI 的任务
+请将随包 st-engine-maau 的结构变换、自动 VBIAS 和候选电路生成能力接入服务器上的主流程。主流程源码留在服务器，无须发回本地。
+先阅读主流程实际代码，找到当前 Case/DUT/Bench、器件选择、仿真调度和后续参数优化入口，再用最少适配连接现有能力。本包没有主流程源码；不能把现有适配接口声明当成已经完成主流程接入。
+本次交付未修改业务代码。完整保留当前仓库的源码、测试、配置示例和文档；不包含 build、.git、缓存、服务器 PDK、许可证、OA 库及运行会话。
+
+二、当前功能与必须沿用的规则
+1. 支持 Source 串电阻、MOS Stack、同型 Cascode、异型 Cascode，以及确认、逐次撤销、重置和最终生成。
+2. “异型”是相同 NMOS/PMOS 极性下的不同准入型号，不是把 NMOS 换成 PMOS。
+3. 同型/异型、NMOS/PMOS 均在原 MOS 的 D 侧加 Cascode，原 G/S/Bulk 接线不变。
+4. 确认/撤销阶段只编辑操作序列；最终 generate 才执行实际生成与所需仿真。
+5. 每组 Cascode 最多 16 个自动 DC 搜索点，首个满足最低条件的点立即入选。没有完全满足的点时，从有效收敛且数据完整的点中选最佳候选。不能把执行失败或没有结果当成有效候选。
+6. 多组按序累积：保留前组的接线与选定参数，在此基础上处理下一组。实验路径不以“前组重新合格”阻断后组搜索，前组检查标为 DEFERRED_TO_FINAL；最终整图 DC 仍真实报告各组未满足项。
+7. 电阻调整采用当前真实 PDK/CDF 接受的参数集合，几何参数和实际网表必须生效。不能只改 r 文本、手填范围或把 CDF 接受等同于完整可靠性通过。
+8. 用户不应在终端手动选阻值、尺寸或排查日志来决定 VBIAS；主流程传递输入并展示结果，搜索自动完成。真实工具错误应作为任务错误返回。
+9. 此阶段不新增输出电压精度、启动时间、稳定性、PVT、面积或功耗优化验收；后续性能调优接主流程已有优化器。
+10. 仅实现功能和必要正确性检查。不增加备份、容灾、安全加固、完整依赖封存、多层哈希门禁或复杂迁移。禁止使用或重新安装 Superpowers 及其别名/副本。
+
+三、从哪里接
+推荐先复用已经在服务器跑通的 Python/CLI 路径，避免为接入重写 VBIAS 或 OA 流程。
+- scripts/resume_cascode_experiment.py：已有实验会话的续跑、自动合法电阻候选准备、生成和结果汇总。
+- server/site/run_cascode_experiment.py：实验流程调度、实时进度及 completion_status/validate_result。
+- server/site/standalone.py：discover-pdk / inspect / confirm / list / undo / fresh / generate / open，负责现场环境及核心 CLI 调用。
+- app/st_circuit_tool.cpp、src/Cli.cpp：C++ 命令入口、会话操作和累积生成。
+- src/Transform.cpp、src/AutoBias.cpp、src/DcSolver.cpp：变换接线、VBIAS 模板及最多 16 点求解。
+- src/Packaging.cpp、src/Materialization.cpp、src/VariantVerifier.cpp：封装、实际 OA 生成、回读和最终验证。
+- src/VirtuosoBackend.cpp、server/st_virtuoso_backend.sh、server/skill/、skill/：Virtuoso 后端及 SKILL。
+- server/site/op_provider.py、cascode_runtime.py、dc_results.py：候选仿真调度与工作点读取。
+- integration/maau/：已有 Maau 适配边界；若主流程适合直接调用 C++，参考 SnapshotSource、OpSimulationHost、TopologyVariantMaterializer。需在现场映射真实 Case/Bench/Tech/Netlist 类型，不要伪造其实现。
+- tests/、examples/operations/：回归测试与操作配置示例。测试中的具体 I21/I29/I85/I105 不能写死到产品功能。
+- scripts/test_mixed_cascode.sh：服务器测试脚本，会重置/构建测试序列；不能直接充当产品的用户操作入口。
+
+调用关系是 Python 启动 C++ CLI，C++ 再通过后端启动 SKILL/Python/Cadence，结果回到 C++ 判定后由 Python 汇总。
+主流程至少要提供：真实源 DUT 与 Bench 的 L/C/V、cds.lib/现场环境、模型和仿真设置、选中的 MOS 与操作、会话输出位置。沿用服务器已经可用的数据和环境，具体字段以现有代码解析器为准。
+异步执行 generate，转发已有进度事件及最终结果；避免在 UI 请求中阻塞数十分钟。复用主流程已有任务机制即可。
+
+四、结果怎么交给主流程优化器
+生成后的关键文件：
+- work/reports/validation.txt：最终结构、电气判定、目标 CellView 与未满足项。
+- work/after/core_roundtrip.scs：生成电路的实际回读网表。
+- work/analysis/resolved_parameters.json：选定参数。
+- work/analysis/solver_trace.jsonl（部分历史会话为 .json）：逐组搜索结果。
+- 本次 resume_generate_*/run_status.json：续跑状态和输出路径。使用此次运行实际返回的位置，不按目录名猜测成功。
+路径须以生成结果中 RESULT_CELL / RESULT_NETLIST / SELECTED_PARAMETERS_FILE 及 run_status.json 为准。
+
+结果分类：
+A. RESULT=EXPERIMENT_DC_PASS / EXPERIMENTAL_DC_READY=true
+   已通过当前最低 DC 条件；不表示启动、稳定性、PVT 或完整可靠性已验收。
+B. RESULT=OPTIMIZATION_CANDIDATE_READY / OPTIMIZATION_CANDIDATE_READY=true
+   已生成有效待优化候选，但存在 UNMET_REQUIREMENTS。允许按用户要求交给后续优化器，保留未满足项及后续复验；不能在 UI 中写成“电气全部通过”。
+C. RESULT=INCOMPLETE
+   生成没有完成，或没有可交付的有效候选，应展示实际错误，不能拿旧结果冒充本次输出。
+
+实验结果仍可能 READY_FOR_SIZING=false、RELIABILITY_VERIFIED=false、PUBLISHED=false；这是现有正式验收字段。主流程接入应显式支持 A/B 两种交付状态，而不是把这些旧字段改成 true。
+组合测试脚本即使候选已生成，也会因电气未全过输出 COMBINED_FEATURES_TEST=INCOMPLETE / 退出 2；请区分“测试总验收”和实际 generate 的交付结果。
+后续优化必须使用返回的派生电路及选中参数作为起点，不能重新绑回原始未变换 DUT。是否能修复所有未满足项，要由后续优化和真实仿真确定。
+
+五、最新验证情况（来源：用户本对话回传的服务器日志，未在本机复跑）
+- 早前 I21 同型 Cascode 已生成并通过最低 DC，VBIAS 约 0.915812 V。
+- 最新组合：I105 电阻并撤销 → I29 同型 → I85 异型 → I21 两级共栅 Stack。
+- 32 个搜索点均收敛；I29 与 I85 各 16 点并分别选第 2、第 8 点为 best_effort。
+- 最终产生 5 个子图；电阻撤销恢复、两组 D 侧接法、原 G/S/Bulk、VBIAS 接线、Stack 串联/共栅均 PASS。
+- RESULT=OPTIMIZATION_CANDIDATE_READY；两组 saturation 仍未满足。最终 VBIAS：I29 约 0.691758 V，I85 约 0.781584 V。
+- COMBINED_STRUCTURE_TEST=PASS；COMBINED_DC_TEST=NOT_PASSED。不能据此声称全部 MOS/型号均可自动得到合格 Cascode。
+- 最新整个 generate 用时 4210.2 秒（约 70 分钟），包含搜索、OA 操作和最终生成，不是单次 Spectre 时间。
+- 当前提交的本地回归记录：DcSolver 120 项、CliWorkflow 186 项、CascodeExperiment Python 43 项及 tool-only 编译通过。记录位于 docs/03-变更记录.md 的 C-097。本次打包仅核对文件完整性，不重复运行这些测试。
+
+六、构建与读取入口
+把压缩包上传到服务器代码父目录后：
+  unzip -o st-engine-maau_source_20261019.zip
+  bash st-engine-maau/scripts/build.sh --tool-only
+  python3 st-engine-maau/server/site/standalone.py --help
+  python3 st-engine-maau/scripts/resume_cascode_experiment.py --help
+
+预期构建输出：built tool only: .../st-engine-maau/build/bin/st_circuit_tool
+以上 help 不启动候选仿真。Linux 上用现场 C++17 编译器重编，不带本机二进制。
+构建优先沿用 scripts/build.sh；当前 CMakeLists.txt 的 st_engine 显式源文件清单缺少 src/DcSolver.cpp。若接入主流程改用 CMake，需补齐该源文件并验证链接；本次仅交付原样源码，未修改构建配置。
+
+只有需要复查现有服务器组合结果时才运行（不重新搜索）：
+  bash st-engine-maau/scripts/test_mixed_cascode.sh combo-check "$st_batch/candidate_I21_xbb892w0"
+这依赖服务器原有 st_batch 变量、混合会话指针和结果文件；它们不在源码包里。
+
+七、阅读顺序与接入验收
+先看本说明，再看 docs/01-需求与决策.md 的最新 R-092、docs/02-实施计划.md 的 P-093、docs/03-变更记录.md 的 C-097，以及上面列出的真实入口。
+仓库 README 和旧设计/验证文档保留了历史方案与过期命令；有冲突时以最新需求、当前实现和最新服务器结果为准。不要按历史文档恢复已取消的前序电气门槛或重复检查。
+接入只需证明：主流程能选择器件/操作、撤销正确、最终自动生成、能区分 A/B/C 结果、待优化候选能进入真实优化任务且使用正确派生 DUT、错误能准确返回。
+仅依据本包无法确认私有主流程的接口兼容性；服务器 AI 应在能读取主流程代码的环境中完成实际适配及验证，并报告修改文件、调用入口和结果。
