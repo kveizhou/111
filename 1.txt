@@ -1,1 +1,1 @@
-bash -c 'p=$(cat "$1/work/test_operations/mixed_four/candidate.txt"); d=$(ls -td "$p"/resume_generate_* | head -1); python3 -m json.tool "$d/run_status.json"; tail -n 40 "$d/generate.log"' _ "$st_batch/candidate_I21_xbb892w0"
+unzip -o ldo_short_cascode_undo_20261018.zip && bash st-engine-maau/scripts/test_mixed_cascode.sh same-cross-undo "$st_batch/candidate_I21_xbb892w0"
