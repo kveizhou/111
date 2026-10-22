@@ -1,1 +1,30 @@
-unzip -o ldo_continue_best_candidate_20261018.zip && bash st-engine-maau/scripts/build.sh --tool-only && bash st-engine-maau/scripts/test_mixed_cascode.sh combo-alt "$st_batch/candidate_I21_xbb892w0"
+当前实现是：由调用方指定要修改的 Cell，core_subckt 默认使用这个 Cell 的名字；生成的 PKG0001 实例放在该 Cell 的生成副本内部。
+这里要区分“模块”和“模块里的 MOS”。
+1．core_subckt 是谁指定的？
+入口	如何确定
+原来的 CLI	调用方通过 --lib --cell --view 指定电路；core_subckt 默认等于 --cell，也允许显式传入 --core-subckt
+现在的主流程 JSON	默认读取 target_dut_lib/cell/view，因此 core_subckt 默认等于 target_dut_cell
+
+
+代码就是这个逻辑：[CliCommands.cpp (line 129)](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/st-engine-maau/src/CliCommands.cpp:129)。
+它不会自动遍历整个工程，再挑一个模块作为 core。 而且 --core-subckt 在这条 OA 导出路径中是导出网表的子电路名称，不是指定某个深层实例路径的入口。
+所以，你说的 I50、I60 要分两种情况：
+- **如果它们是同一个 Cell 当前层里的两只 MOS：**只需 inspect 一次，随后分别 confirm I50、confirm I60，不用更换 core。
+- **如果它们是两个子模块实例：**要修改其内部 MOS，目前需要把对应子模块的 库／Cell／View 作为操作对象建立会话。当前没有自动沿 I50、I60 的层级路径下钻并修改的功能。
+这也意味着：主流程 JSON 如果提供的是整个 LDO 顶层，当前代码只列出该层直接包含的 MOS，不会自动列出所有子模块内部的 MOS。
+2．PKG0001 放在哪里？
+放在所选 core 对应的“生成后 Cell”内部，替换被修改 MOS 在父层的位置。 PKG0001 自身是一个新建的子 Cell，其符号实例被放进父 Cell；VBIAS 通常另建一个子 Cell，与它并列。
+例如选择 core 中的 I21：
+变换前：core
+├─ I21
+└─ 其他器件／子模块
+
+变换后：core 的生成副本
+├─ I21 → 引用 PKG0001
+│         ├─ 原来的 I21
+│         └─ 新增的 Cascode MOS
+├─ I_VBIAS_N_I21 → 引用 VBIAS0001
+│                   └─ 偏置电路
+└─ 其他器件／子模块
+注意：PKG0001 是封装编号／子 Cell 名称的一部分，父层实例名可以仍然叫 I21。
+OA 计划里的 hierarchy_path="/" 表示“当前选定 core 的根层”，不是整个芯片的最高层。[对应放置代码 (line 532)](/Users/zkw/Desktop/ChatGPT/Maau UI的一次讨论/st-engine-maau/src/Packaging.cpp:532)
